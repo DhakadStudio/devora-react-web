@@ -428,7 +428,7 @@ export type Tables<
     }
     ? R
     : never
-  : never
+  : TableName
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends keyof Database["public"]["Tables"],
