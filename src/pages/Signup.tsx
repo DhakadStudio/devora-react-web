@@ -96,6 +96,10 @@ export function Signup() {
         Already have one?{' '}
         <Link to="/login" style={{ color: 'var(--accent)' }}>
           Sign in
+        </Link>{' '}
+        ·{' '}
+        <Link to="/reset-password" style={{ color: 'var(--accent)', minHeight: 44, display: 'inline-flex', alignItems: 'center' }}>
+          Forgot password?
         </Link>
       </p>
     </AuthShell>

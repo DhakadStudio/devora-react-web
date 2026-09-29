@@ -24,9 +24,11 @@ const Progress = lazy(() => import('./pages/Progress').then((m) => ({ default: m
 const Profile = lazy(() => import('./pages/Profile').then((m) => ({ default: m.Profile })))
 const Login = lazy(() => import('./pages/Login').then((m) => ({ default: m.Login })))
 const Signup = lazy(() => import('./pages/Signup').then((m) => ({ default: m.Signup })))
+const ResetPassword = lazy(() => import('./pages/ResetPassword').then((m) => ({ default: m.ResetPassword })))
+const Project = lazy(() => import('./pages/Project').then((m) => ({ default: m.ProjectPage })))
 const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })))
 
-const BARE_ROUTES = ['/landing', '/login', '/signup']
+const BARE_ROUTES = ['/landing', '/login', '/signup', '/reset-password']
 const VISITED_KEY = 'devora:visited'
 
 /** True only until the landing page has been seen once this device. */
@@ -78,6 +80,7 @@ function Shell() {
           <Route path="/landing" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
         </Routes>
       </Suspense>
     )
@@ -97,6 +100,7 @@ function Shell() {
               <Route path="/challenges" element={<Challenges />} />
               <Route path="/challenges/:challengeId" element={<ChallengeDetail />} />
               <Route path="/lesson/:lessonId" element={<Lesson />} />
+              <Route path="/project/:projectId" element={<Project />} />
               <Route path="/playground" element={<Playground />} />
               <Route path="/progress" element={<Progress />} />
               <Route path="/profile" element={<Profile />} />

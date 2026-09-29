@@ -34,6 +34,31 @@ function parseRubric(value: Json): ProjectRequirement[] {
   return requirements
 }
 
+export async function getProject(projectId: string): Promise<GuidedProject | null> {
+  const client = getSupabase()
+  if (!client) return null
+  try {
+    const { data, error } = await (client as unknown as DbClient)
+      .from('projects')
+      .select(PROJECT_COLUMNS)
+      .eq('id', projectId)
+      .limit(1)
+      .maybeSingle()
+    if (error) return null
+    if (data === null) return null
+    return {
+      id: data.id,
+      moduleId: data.module_id,
+      title: data.title,
+      brief: data.brief,
+      guideLevel: data.guide_level,
+      rubric: parseRubric(data.rubric)
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function getProjectForModule(moduleId: string): Promise<GuidedProject | null> {
   const client = getSupabase()
   if (!client) return null

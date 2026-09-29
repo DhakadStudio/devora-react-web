@@ -62,6 +62,11 @@ export function Login() {
         <div className="field">
           <label htmlFor="lg-pass">Password</label>
           <input id="lg-pass" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" placeholder="••••••••" />
+          <p className="muted fs-12">
+            <Link to="/reset-password" style={{ color: 'var(--accent)', minHeight: 44, display: 'inline-flex', alignItems: 'center' }}>
+              Forgot password?
+            </Link>
+          </p>
         </div>
         {error && (
           <p className="field-err" role="alert">

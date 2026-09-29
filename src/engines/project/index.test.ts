@@ -243,6 +243,68 @@ describe('project engine', () => {
     })
   })
 
+  describe('getProject', () => {
+    it('returns the project row by id with a parsed rubric, keeping label and optional hint', async () => {
+      const { engine, calls } = await setup({ projects: projectRows })
+      const project: GuidedProject | null = await engine.getProject('project-intro-card')
+      expect(project).toEqual({
+        id: 'project-intro-card',
+        moduleId: 'module-intro',
+        title: 'Intro Card',
+        brief: 'Build a card that introduces you.',
+        guideLevel: 'guided',
+        rubric: [
+          {
+            label: 'Card prints a heading with your name in it',
+            hint: 'Use console.log with a template string.'
+          },
+          { label: 'Card shows three skills you are learning' }
+        ]
+      })
+      expect(calls).toEqual([
+        { table: 'projects', select: PROJECT_COLUMNS, eq: ['id', 'project-intro-card'], limit: 1 }
+      ])
+    })
+
+    it('drops non-conforming rubric entries when loading by id', async () => {
+      const { engine } = await setup({ projects: projectRows })
+      const project = await engine.getProject('project-mixed-rubric')
+      expect(project).toEqual({
+        id: 'project-mixed-rubric',
+        moduleId: 'module-mixed',
+        title: 'Mixed Rubric',
+        brief: null,
+        guideLevel: 'partially-guided',
+        rubric: [
+          { label: 'Valid requirement', hint: 'Do the thing.' },
+          { label: 'Another valid one' }
+        ]
+      })
+    })
+
+    it('returns null when no project exists with that id', async () => {
+      const { engine } = await setup({ projects: projectRows })
+      await expect(engine.getProject('project-missing')).resolves.toBeNull()
+    })
+
+    it('returns null without throwing when the query returns an error', async () => {
+      const { engine } = await setupError({ selectError: true })
+      await expect(engine.getProject('project-intro-card')).resolves.toBeNull()
+    })
+
+    it('returns null without throwing when the database throws', async () => {
+      const { engine } = await setupError({ throwOnSelect: true })
+      await expect(engine.getProject('project-intro-card')).resolves.toBeNull()
+    })
+
+    it('returns null when supabase is not configured', async () => {
+      const supabase = await import('../../lib/supabase')
+      vi.mocked(supabase.getSupabase).mockReturnValue(null)
+      const engine = await import('../../engines/project')
+      await expect(engine.getProject('project-intro-card')).resolves.toBeNull()
+    })
+  })
+
   describe('submitProject', () => {
     it('inserts a submission with status submitted and returns ok true', async () => {
       const { engine, calls } = await setup({ projects: projectRows })
