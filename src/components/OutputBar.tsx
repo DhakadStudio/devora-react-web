@@ -51,8 +51,32 @@ export function ConsoleLogs({ result }: { result: RunResult }) {
   )
 }
 
-export function ErrorExplain({ result }: { result: RunResult }) {
-  if (!result.error) return null
+/** Educational error shape from the execution engine (ExecResult.error).
+ *  Passed alongside/instead of `result` so the engine's message/expected/
+ *  nextStep fields render verbatim. The `result` path is kept for pages that
+ *  still use the legacy runner. */
+interface EngineError {
+  message: string
+  expected: string
+  nextStep: string
+}
+
+export function ErrorExplain({ result, error }: { result?: RunResult; error?: EngineError }) {
+  if (error) {
+    return (
+      <div className="error-explain" role="alert">
+        <h4>
+          <Icon name="alert" size={14} /> What happened
+        </h4>
+        <p>{error.message}</p>
+        <h4 style={{ color: 'var(--muted)', marginTop: 'var(--sp-3)' }}>What it expected</h4>
+        <p>{error.expected}</p>
+        <h4 style={{ color: 'var(--muted)', marginTop: 'var(--sp-3)' }}>Next step</h4>
+        <p>{error.nextStep}</p>
+      </div>
+    )
+  }
+  if (!result?.error) return null
   return (
     <div className="error-explain" role="alert">
       <h4>
