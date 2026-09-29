@@ -14,7 +14,6 @@ import { useHints } from '../engines/learning/hints'
 import { gradeMultipleChoice } from '../engines/learning/mc'
 import { runCode } from '../engines/execution'
 import { useProgress } from '../engines/progress'
-import type { RunResult } from '../lib/runner'
 import { FullscreenButton } from '../components/FullscreenButton'
 import { CodeEditor } from '../components/CodeEditor'
 import { OutputBar, ErrorExplain } from '../components/OutputBar'
@@ -49,7 +48,10 @@ export function LessonPage() {
   const [lesson, setLesson] = useState<Lesson | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [retry, setRetry] = useState(0)
-  const [, actions] = useProgress()
+  // Destructured, not the actions object: openLesson is useCallback([])-stable,
+  // while the actions literal is fresh every render and would re-fire this
+  // effect on every render (infinite update loop).
+  const [, { openLesson }] = useProgress()
 
   // THE CRITICAL LOOP, step 1 — open lesson (progress: guest localStorage or
   // signed-in auto-sync) + fetch the lesson content from the curriculum engine.
@@ -58,7 +60,7 @@ export function LessonPage() {
     let cancelled = false
     setLesson(null)
     setLoadFailed(false)
-    actions.openLesson(lessonId)
+    openLesson(lessonId)
     getLesson(lessonId).then((l) => {
       if (cancelled) return
       if (l) setLesson(l)
@@ -67,7 +69,7 @@ export function LessonPage() {
     return () => {
       cancelled = true
     }
-  }, [lessonId, retry, actions])
+  }, [lessonId, retry, openLesson])
 
   // getLesson answers null both for a missing lesson and an unreachable DB,
   // so this state covers both: not-found pattern + retry, never a blank page.
@@ -107,7 +109,10 @@ export function LessonPage() {
 function LessonWorkspace({ lesson }: { lesson: Lesson }) {
   const navigate = useNavigate()
   const toast = useToast()
-  const [progress, actions] = useProgress()
+  // Destructured (all useCallback([])-stable in the progress engine) — the
+  // actions literal is fresh every render, so depending on it churns the
+  // memoized callbacks on every render.
+  const [progress, { recordAttempt, completeLesson, saveCode, saveReflection }] = useProgress()
 
   // Stages come from the learning engine (objective → … → reflection).
   const stages = useMemo(() => (lesson.content ? lessonStages(lesson.content) : []), [lesson.content])
@@ -151,9 +156,9 @@ function LessonWorkspace({ lesson }: { lesson: Lesson }) {
     (v: string) => {
       setReflection(v)
       if (reflectTimer.current) clearTimeout(reflectTimer.current)
-      reflectTimer.current = setTimeout(() => actions.saveReflection(lesson.id, v), 600)
+      reflectTimer.current = setTimeout(() => saveReflection(lesson.id, v), 600)
     },
-    [actions, lesson.id]
+    [saveReflection, lesson.id]
   )
 
   // prev/next lesson navigation in the module's lesson order.
@@ -196,10 +201,10 @@ function LessonWorkspace({ lesson }: { lesson: Lesson }) {
       if (codeTimer.current) clearTimeout(codeTimer.current)
       const exerciseKey = exercise?.id ?? ''
       codeTimer.current = setTimeout(() => {
-        if (exerciseKey) actions.saveCode(exerciseKey, v)
+        if (exerciseKey) saveCode(exerciseKey, v)
       }, 600)
     },
-    [actions, exercise]
+    [saveCode, exercise]
   )
 
   useEffect(
@@ -209,6 +214,33 @@ function LessonWorkspace({ lesson }: { lesson: Lesson }) {
     },
     []
   )
+
+  // The lesson exists but its content could not be read (missing or malformed
+  // JSONB) — educational empty state, never a blank page.
+  if (!lesson.content) {
+    return (
+      <div className="page page-wide">
+        <PageHeader
+          trail={[{ label: 'Paths', to: '/paths' }, { label: lesson.title }]}
+          title={lesson.title}
+        />
+        <div className="empty">
+          <h3>Lesson content unavailable</h3>
+          <p>
+            What happened: this lesson's content could not be read — it may be missing or
+            malformed.
+          </p>
+          <p>
+            Next step: browse a path and pick this lesson again, or continue with another lesson —
+            your other progress is safe.
+          </p>
+          <Link className="btn btn-primary" to="/paths">
+            Browse paths
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   async function run() {
     if (!exercise) return
@@ -236,7 +268,7 @@ function LessonWorkspace({ lesson }: { lesson: Lesson }) {
     if (!exercise) return
     setTypedCode(exercise.starterCode ?? '')
     setRunResult(null)
-    actions.saveCode(exercise.id, exercise.starterCode ?? '')
+    saveCode(exercise.id, exercise.starterCode ?? '')
   }
 
   function praiseFor() {
@@ -257,8 +289,10 @@ function LessonWorkspace({ lesson }: { lesson: Lesson }) {
       return
     }
     if (runResult.error || !runResult.allPassed) {
-      actions.recordAttempt(exercise.id, false, hintDeltaRef.current, lesson.id)
-      hintDeltaRef.current = 0
+      if (!lessonDone) {
+        recordAttempt(exercise.id, false, hintDeltaRef.current, lesson.id)
+        hintDeltaRef.current = 0
+      }
       toast.push(
         'error',
         'Something is still failing',
@@ -266,24 +300,27 @@ function LessonWorkspace({ lesson }: { lesson: Lesson }) {
       )
       return
     }
-    actions.recordAttempt(exercise.id, true, hintDeltaRef.current, lesson.id)
-    hintDeltaRef.current = 0
-    actions.completeLesson(lesson.id)
+    if (!lessonDone) {
+      recordAttempt(exercise.id, true, hintDeltaRef.current, lesson.id)
+      hintDeltaRef.current = 0
+    }
+    completeLesson(lesson.id)
     toast.push('success', 'Lesson complete!', next ? `Up next: ${next.title}` : 'Module complete — keep going.')
   }
 
   // Multiple-choice exercises grade inline: correct → attempt + completion,
   // wrong → one failed attempt recorded, then free retries without spamming.
+  // A completed lesson records nothing further (options stay explorable).
   function onMcPick(i: number) {
-    if (!exercise || exercise.answerIndex === null) return
+    if (!exercise || exercise.answerIndex === null || lessonDone) return
     if (gradeMultipleChoice(exercise, i)) {
-      actions.recordAttempt(exercise.id, true, hintDeltaRef.current, lesson.id)
+      recordAttempt(exercise.id, true, hintDeltaRef.current, lesson.id)
       hintDeltaRef.current = 0
-      actions.completeLesson(lesson.id)
+      completeLesson(lesson.id)
       toast.push('success', 'Correct!', praiseFor())
     } else if (!mcFailed) {
       setMcFailed(true)
-      actions.recordAttempt(exercise.id, false, hintDeltaRef.current, lesson.id)
+      recordAttempt(exercise.id, false, hintDeltaRef.current, lesson.id)
       hintDeltaRef.current = 0
     }
   }
@@ -296,12 +333,12 @@ function LessonWorkspace({ lesson }: { lesson: Lesson }) {
   // Lessons without an exercise complete here (the exercise Submit gates the
   // rest — that IS the critical loop).
   function finish() {
-    actions.completeLesson(lesson.id)
+    completeLesson(lesson.id)
     if (reflectTimer.current) {
       clearTimeout(reflectTimer.current)
       reflectTimer.current = null
     }
-    if (reflection.trim()) actions.saveReflection(lesson.id, reflection.trim())
+    if (reflection.trim()) saveReflection(lesson.id, reflection.trim())
     toast.push('success', 'Lesson complete!', next ? `Up next: ${next.title}` : 'Module complete — keep going.')
   }
 
@@ -734,12 +771,23 @@ function editorLanguage(language: string | null): 'javascript' | 'html' | 'css' 
   return 'javascript'
 }
 
+/** Local view of the shared OutputBar/TestCases prop shape, mapped from the
+ *  learning engine's ExerciseRunResult at this call site. Structurally the
+ *  components' prop type (they still serve pages on the legacy runner until
+ *  Task 12) — declared here so this page imports no old-lib module. */
+interface ResultView {
+  logs: { type: 'log' | 'error' | 'warn'; text: string }[]
+  tests: { name: string; passed: boolean; detail?: string }[]
+  error?: { message: string; hint: string }
+  exitCode: 0 | 1
+}
+
 /** Maps the learning engine's ExerciseRunResult onto the shared OutputBar/
  *  TestCases prop shape — mapped at this call site so those components keep
  *  serving the other pages still on the legacy runner. Failure detail shows
  *  expected vs actual per case; the engine's stdin/stdout run model has no
  *  program console logs, so ConsoleLogs is not used here. */
-function toRunnerResult(r: ExerciseRunResult): RunResult {
+function toRunnerResult(r: ExerciseRunResult): ResultView {
   return {
     logs: [],
     tests: r.testResults.map((t) => ({
