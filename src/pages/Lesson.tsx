@@ -44,7 +44,11 @@ const EMPTY_EXERCISE: ExerciseContent = {
 }
 
 export function LessonPage() {
-  const { lessonId } = useParams()
+  // The app mounts this page under /lesson/* (splat): real lesson ids contain
+  // slashes ("module/lesson") and a :lessonId param only matches a single
+  // segment. The ?? keeps the named-param shape for alternate mounts.
+  const params = useParams()
+  const lessonId = params['*'] ?? params.lessonId
   const [lesson, setLesson] = useState<Lesson | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [retry, setRetry] = useState(0)
