@@ -105,3 +105,35 @@ export async function signOut() {
   if (!supabase) return
   await supabase.auth.signOut()
 }
+
+export async function requestPasswordReset(email: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = getSupabase()
+  if (!supabase) return { ok: false, error: NOT_CONFIGURED }
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/reset-password'
+    })
+    if (error) return { ok: false, error: error.message }
+    return { ok: true }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'failed to request password reset'
+    }
+  }
+}
+
+export async function updatePassword(newPassword: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = getSupabase()
+  if (!supabase) return { ok: false, error: NOT_CONFIGURED }
+  try {
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) return { ok: false, error: error.message }
+    return { ok: true }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'failed to update password'
+    }
+  }
+}
