@@ -1,45 +1,150 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { PATHS } from '../lib/curriculum'
-import { useProgress, pathCompletion } from '../lib/progress'
+import {
+  getPath,
+  listCourses,
+  listModules,
+  listLessons,
+  type PathSummary,
+  type CourseSummary,
+  type LessonRef
+} from '../engines/curriculum'
+import { getProjectForModule } from '../engines/project'
+import { useProgress, moduleState, pathCompletion, firstUnfinishedLesson } from '../engines/progress'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
 import { JourneyNode, ProgressBar } from '../components/JourneyChecklist'
+import { getSupabase } from '../lib/supabase'
 
-const TYPE_LABEL: Record<string, string> = {
-  exercise: 'Exercise',
-  concept: 'Concept',
-  debugging: 'Debugging',
-  project: 'Project'
+interface ModuleDetail {
+  id: string
+  title: string
+  lessons: LessonRef[]
+  project: { id: string; title: string } | null
+}
+
+interface PathDetailData {
+  path: PathSummary
+  courses: CourseSummary[]
+  modulesByCourse: Record<string, ModuleDetail[]>
+  allLessonIds: string[]
+  moduleByLesson: Record<string, string>
+  lessonTitles: Record<string, string>
+}
+
+/** Path → courses → modules (+ per-module project) → lessons, composed into flat lookups. */
+async function loadPathDetail(pathId: string): Promise<PathDetailData | null> {
+  const path = await getPath(pathId)
+  if (!path) return null
+  const courses = await listCourses(pathId)
+  const modulesByCourse: Record<string, ModuleDetail[]> = {}
+  const allLessonIds: string[] = []
+  const moduleByLesson: Record<string, string> = {}
+  const lessonTitles: Record<string, string> = {}
+  for (const course of courses) {
+    const mods = await listModules(course.id)
+    const details: ModuleDetail[] = []
+    for (const mod of mods) {
+      const lessons = await listLessons(mod.id)
+      const project = await getProjectForModule(mod.id)
+      details.push({
+        id: mod.id,
+        title: mod.title,
+        lessons,
+        project: project ? { id: project.id, title: project.title } : null
+      })
+      for (const lesson of lessons) {
+        moduleByLesson[lesson.id] = mod.id
+        lessonTitles[lesson.id] = lesson.title
+        allLessonIds.push(lesson.id)
+      }
+    }
+    modulesByCourse[course.id] = details
+  }
+  return { path, courses, modulesByCourse, allLessonIds, moduleByLesson, lessonTitles }
 }
 
 export function PathDetail() {
   const { pathId } = useParams()
-  const path = PATHS.find((p) => p.id === pathId)
   const [progress] = useProgress()
+  const [data, setData] = useState<PathDetailData | null>(null)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [attempt, setAttempt] = useState(0)
   const [openModule, setOpenModule] = useState<string | null>(null)
 
-  const modules = useMemo(() => {
-    if (!path) return []
-    const byModule = new Map<string, typeof path.lessons>()
-    for (const l of path.lessons) {
-      const arr = byModule.get(l.module) ?? []
-      arr.push(l)
-      byModule.set(l.module, arr)
+  useEffect(() => {
+    let cancelled = false
+    setStatus('loading')
+    setOpenModule(null)
+    if (!getSupabase()) {
+      setStatus('error')
+      return
     }
-    return Array.from(byModule, ([name, lessons]) => ({ name, lessons }))
-  }, [path])
+    if (!pathId) {
+      setStatus('ready')
+      return
+    }
+    loadPathDetail(pathId)
+      .then((d) => {
+        if (!cancelled) {
+          setData(d)
+          setStatus('ready')
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setStatus('error')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [pathId, attempt])
 
-  // the module holding the learner's current (first unfinished) lesson opens by default
-  const currentModule = path ? path.lessons.find((l) => !progress.completed[l.id])?.module ?? null : null
-  const effectiveOpen = openModule ?? currentModule
+  const retry = useCallback(() => setAttempt((a) => a + 1), [])
 
-  if (!path) {
+  if (status === 'loading') {
+    return (
+      <div className="page" aria-busy="true" aria-label="Loading path">
+        <div className="skeleton" style={{ height: 16, width: 200, marginBottom: 'var(--sp-4)' }} />
+        <div className="skeleton" style={{ height: 32, width: 320, marginBottom: 'var(--sp-3)' }} />
+        <div className="grid path-layout">
+          <div className="skeleton" style={{ height: 280 }} />
+          <div className="skeleton" style={{ height: 280 }} />
+        </div>
+      </div>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="page">
+        <section className="panel panel-pad rise" role="alert">
+          <p className="label">something went wrong</p>
+          <h2 style={{ fontSize: 'var(--fs-20)', fontWeight: 600, marginTop: 'var(--sp-2)' }}>
+            We couldn't load this path
+          </h2>
+          <p className="muted fs-14" style={{ marginTop: 'var(--sp-2)' }}>
+            Check your connection and try again.
+          </p>
+          <div className="row" style={{ marginTop: 'var(--sp-4)' }}>
+            <button className="btn btn-primary" onClick={retry}>
+              Try again
+              <Icon name="rotate" size={14} />
+            </button>
+            <Link className="btn btn-secondary" to="/paths">
+              All paths
+            </Link>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
+  if (!data) {
     return (
       <div className="page">
         <div className="empty">
           <h3>Path not found</h3>
-          <p>That path doesn't exist. The list below is always accurate.</p>
+          <p>That path doesn't exist. The list on the paths page is always accurate.</p>
           <Link className="btn btn-primary" to="/paths">
             All paths
           </Link>
@@ -48,16 +153,20 @@ export function PathDetail() {
     )
   }
 
-  const c = pathCompletion(progress, path.id)
-  const nextLesson = path.lessons.find((l) => !progress.completed[l.id])
-  const isDone = c.total > 0 && c.done === c.total
+  const path = data.path
+  const c = pathCompletion(data.allLessonIds, progress)
+  const nextId = firstUnfinishedLesson(data.allLessonIds, progress)
+  const nextTitle = nextId ? data.lessonTitles[nextId] : undefined
+  const nextModuleId = nextId ? data.moduleByLesson[nextId] : undefined
+  // the module holding the learner's current (first unfinished) lesson opens by default
+  const effectiveOpen = openModule ?? nextModuleId ?? null
 
   return (
     <div className="page">
       <PageHeader
         trail={[{ label: 'Paths', to: '/paths' }, { label: path.title }]}
         title={path.title}
-        sub={path.description}
+        sub={path.summary}
       />
 
       <div className="grid path-layout" style={{ gap: 'var(--sp-5)', alignItems: 'start' }}>
@@ -66,89 +175,73 @@ export function PathDetail() {
         <section>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 'var(--sp-4)' }}>
             <p className="label">journey checklist</p>
-            <span className="badge">{path.lessons.reduce((s, l) => s + l.minutes, 0)} min total</span>
+            <span className="badge">{path.hours}h estimated</span>
           </div>
-          <ol className="journey">
-            {path.milestones.map((m, i) => (
-              <li key={m} className="journey-item" data-state="todo">
-                <span className="journey-node" style={{ borderRadius: 'var(--r-sm)' }}>
-                  <Icon name="flag" size={14} />
-                </span>
-                <div className="journey-title">
-                  {i + 1}. {m}
-                  <span className="journey-meta">milestone</span>
-                </div>
-              </li>
-            ))}
-
-            {modules.map((mod) => {
-              const lessonsDone = mod.lessons.filter((l) => progress.completed[l.id]).length
-              const moduleState = lessonsDone === mod.lessons.length ? 'done' : lessonsDone > 0 ? 'current' : 'todo'
-              const open = effectiveOpen === mod.name
-              return (
-                <li key={mod.name} className="journey-item" data-state={moduleState}>
-                  <JourneyNode state={moduleState} />
-                  <div>
-                    <button
-                      className="journey-title"
-                      onClick={() => setOpenModule(open ? null : mod.name)}
-                      style={{ background: 'none', border: 0, cursor: 'pointer', padding: 0, textAlign: 'left', color: moduleState === 'done' ? 'var(--muted)' : 'var(--text)' }}
-                      aria-expanded={open}
-                    >
-                      {mod.name}
-                      <span className="journey-meta">
-                        {lessonsDone}/{mod.lessons.length} · {mod.lessons.reduce((s, l) => s + l.minutes, 0)} min
-                      </span>
-                      <Icon name={open ? 'chevronD' : 'chevronR'} size={14} />
-                    </button>
-
-                    {open && (
-                      <div className="journey-body" style={{ marginTop: 'var(--sp-3)' }}>
-                        {mod.lessons.map((l) => {
-                          const done = Boolean(progress.completed[l.id])
-                          return (
-                            <Link key={l.id} className="journey-row" to={`/lesson/${l.id}`} data-state={done ? 'done' : 'todo'}>
-                              <span style={{ color: done ? 'var(--success)' : 'var(--muted)' }}>
-                                <Icon name={done ? 'check' : 'chevronR'} size={14} />
-                              </span>
-                              <span className="journey-lesson">
-                                {l.title}
-                                <span className="journey-meta" style={{ display: 'block' }}>
-                                  {TYPE_LABEL[l.type]} · {l.minutes} min
-                                </span>
-                              </span>
-                              {done && <span className="badge badge-success">done</span>}
-                              {!done && nextLesson?.id === l.id && <span className="badge" style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}>up next</span>}
-                            </Link>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </li>
-              )
-            })}
-
-            {/* Final project, visually distinct */}
-            <li className="journey-item" data-state={isDone ? 'done' : 'current'}>
-              <span className="journey-node" style={{ borderRadius: 'var(--r-sm)', borderColor: isDone ? 'var(--success)' : 'var(--accent)', color: isDone ? 'var(--success)' : 'var(--accent)' }}>
-                <Icon name="flag" size={14} />
-              </span>
-              <div>
-                <div className="journey-title" style={{ color: 'var(--text)' }}>
-                  Final project
-                </div>
-                <p className="muted fs-14" style={{ marginTop: 'var(--sp-1)' }}>
-                  Combine everything into something you can reuse and share.
+          {data.courses.map((course) => {
+            const mods = data.modulesByCourse[course.id] ?? []
+            return (
+              <div key={course.id} style={{ marginBottom: 'var(--sp-5)' }}>
+                <p className="label" style={{ marginBottom: 'var(--sp-3)', color: 'var(--muted)' }}>
+                  {course.title}
                 </p>
-                {path.finalProjectId && (
-                  <Link className="btn btn-secondary btn-sm" to={`/lesson/${path.finalProjectId}`} style={{ marginTop: 'var(--sp-3)' }}>
-                    Open final project
-                  </Link>
-                )}
+                <ol className="journey">
+                  {mods.map((mod) => {
+                    const lessonIds = mod.lessons.map((l) => l.id)
+                    const mp = pathCompletion(lessonIds, progress)
+                    const ms = moduleState(lessonIds, progress)
+                    const state = ms === 'completed' ? 'done' : ms === 'not-started' ? 'todo' : 'current'
+                    const open = effectiveOpen === mod.id
+                    return (
+                      <li key={mod.id} className="journey-item" data-state={state}>
+                        <JourneyNode state={state} />
+                        <div>
+                          <button
+                            className="journey-title"
+                            onClick={() => setOpenModule(open ? null : mod.id)}
+                            style={{ background: 'none', border: 0, cursor: 'pointer', padding: 0, textAlign: 'left', color: state === 'done' ? 'var(--muted)' : 'var(--text)' }}
+                            aria-expanded={open}
+                          >
+                            {mod.title}
+                            <span className="journey-meta">
+                              {mp.done}/{mp.total}
+                            </span>
+                            <Icon name={open ? 'chevronD' : 'chevronR'} size={14} />
+                          </button>
+
+                          {mod.project && (
+                            <Link className="btn btn-secondary btn-sm" to={`/project/${mod.project.id}`} style={{ marginTop: 'var(--sp-2)' }}>
+                              Module project{mod.project.title ? `: ${mod.project.title}` : ''}
+                            </Link>
+                          )}
+
+                          {open && (
+                            <div className="journey-body" style={{ marginTop: 'var(--sp-3)' }}>
+                              {mod.lessons.map((l) => {
+                                const lessonStatus = progress.lessons[l.id]?.status
+                                const done = lessonStatus === 'passed' || lessonStatus === 'completed'
+                                return (
+                                  <Link key={l.id} className="journey-row" to={`/lesson/${l.id}`} data-state={done ? 'done' : 'todo'}>
+                                    <span style={{ color: done ? 'var(--success)' : 'var(--muted)' }}>
+                                      <Icon name={done ? 'check' : 'chevronR'} size={14} />
+                                    </span>
+                                    <span className="journey-lesson">
+                                      {l.title}
+                                    </span>
+                                    {done && <span className="badge badge-success">done</span>}
+                                    {!done && nextId === l.id && <span className="badge" style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}>up next</span>}
+                                  </Link>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ol>
               </div>
-            </li>
-          </ol>
+            )
+          })}
         </section>
 
         {/* Sidebar: progress + facts */}
@@ -157,7 +250,7 @@ export function PathDetail() {
             <p className="label" style={{ marginBottom: 'var(--sp-3)' }}>your progress</p>
             <ProgressBar ratio={c.ratio} label={`${c.done} of ${c.total} lessons`} />
             <p className="muted fs-12 mono" style={{ marginTop: 'var(--sp-3)' }}>
-              Next up: {nextLesson ? nextLesson.title : '— all done'}
+              Next up: {nextTitle ?? '— all done'}
             </p>
           </div>
 
@@ -177,8 +270,8 @@ export function PathDetail() {
             </ul>
           </div>
 
-          {nextLesson && (
-            <Link className="btn btn-primary" to={`/lesson/${nextLesson.id}`} style={{ width: '100%', justifyContent: 'center' }}>
+          {nextId && (
+            <Link className="btn btn-primary" to={`/lesson/${nextId}`} style={{ width: '100%', justifyContent: 'center' }}>
               Continue this path
               <Icon name="arrowR" size={14} />
             </Link>

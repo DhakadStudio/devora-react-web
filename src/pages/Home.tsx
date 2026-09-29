@@ -1,76 +1,137 @@
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
-import { PATHS, CHALLENGES } from '../lib/curriculum'
-import { useProgress, pathCompletion } from '../lib/progress'
+import { CHALLENGES } from '../lib/curriculum'
+import {
+  listPaths,
+  listCourses,
+  listModules,
+  listLessons,
+  type PathSummary,
+  type LessonRef
+} from '../engines/curriculum'
+import { useProgress, pathCompletion, firstUnfinishedLesson } from '../engines/progress'
 import { ProgressBar } from '../components/JourneyChecklist'
+import { getSupabase } from '../lib/supabase'
+
+interface LessonMeta {
+  pathId: string
+  pathTitle: string
+  moduleTitle: string
+  lessonTitle: string
+}
+
+interface CurriculumData {
+  paths: PathSummary[]
+  lessonMeta: Record<string, LessonMeta>
+  lessonsByPath: Record<string, LessonRef[]>
+  allLessonIds: string[]
+}
+
+/** One DB traversal: paths → courses → modules → lessons, composed into flat lookups. */
+async function loadCurriculum(): Promise<CurriculumData> {
+  const paths = await listPaths()
+  const lessonMeta: Record<string, LessonMeta> = {}
+  const lessonsByPath: Record<string, LessonRef[]> = {}
+  const allLessonIds: string[] = []
+  for (const path of paths) {
+    const lessons: LessonRef[] = []
+    for (const course of await listCourses(path.id)) {
+      for (const mod of await listModules(course.id)) {
+        for (const lesson of await listLessons(mod.id)) {
+          lessons.push(lesson)
+          lessonMeta[lesson.id] = {
+            pathId: path.id,
+            pathTitle: path.title,
+            moduleTitle: mod.title,
+            lessonTitle: lesson.title
+          }
+        }
+      }
+    }
+    lessonsByPath[path.id] = lessons
+    allLessonIds.push(...lessons.map((l) => l.id))
+  }
+  return { paths, lessonMeta, lessonsByPath, allLessonIds }
+}
 
 export function Home() {
   const [progress] = useProgress()
-  const started = Object.keys(progress.completed).length > 0
-  const current = PATHS.flatMap((p) => p.lessons.map((l) => ({ p, l }))).find(
-    ({ l }) => !progress.completed[l.id]
-  )
-  const currentPath = current?.p
-  const nextLesson = current?.l
-  const doneCount = Object.keys(progress.completed).length
-  const skillMap = new Map<string, { done: number; total: number }>()
-  for (const p of PATHS)
-    for (const l of p.lessons) {
-      const r = skillMap.get(l.skill) ?? { done: 0, total: 0 }
-      r.total += 1
-      if (progress.completed[l.id]) r.done += 1
-      skillMap.set(l.skill, r)
+  const [data, setData] = useState<CurriculumData | null>(null)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    setStatus('loading')
+    if (!getSupabase()) {
+      setStatus('error')
+      return
     }
-  const skills = Array.from(skillMap, ([skill, v]) => ({ skill, ...v }))
-    .sort((a, b) => a.done / a.total - b.done / b.total)
-    .slice(0, 6)
+    loadCurriculum()
+      .then((d) => {
+        if (!cancelled) {
+          setData(d)
+          setStatus('ready')
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setStatus('error')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [attempt])
+
+  const retry = useCallback(() => setAttempt((a) => a + 1), [])
+
+  const done = data ? pathCompletion(data.allLessonIds, progress) : { done: 0, total: 0, ratio: 0 }
+  const doneCount = done.done
+  const allDone = done.total > 0 && done.done === done.total
+  const started = Object.keys(progress.lessons).length > 0
+  const nextId = data ? firstUnfinishedLesson(data.allLessonIds, progress) : null
+  const nextMeta = data && nextId ? data.lessonMeta[nextId] : undefined
+  const pathProgress = nextMeta
+    ? pathCompletion(
+        (data?.lessonsByPath[nextMeta.pathId] ?? []).map((l) => l.id),
+        progress
+      )
+    : { done: 0, total: 0, ratio: 0 }
   const daysActive = Object.keys(progress.activity).length
-  const completedChallenges = CHALLENGES.filter((c) => progress.completed[c.id]).length
+  const completedChallenges = CHALLENGES.filter(
+    (c) => progress.lessons[c.id]?.status === 'completed'
+  ).length
 
   return (
     <div className="page">
       <PageHeader trail={[{ label: 'Home' }]} title="Continue learning" />
 
-      {/* Dominant: continue card */}
-      {started && currentPath && nextLesson ? (
-        <section className="panel panel-pad rise" style={{ display: 'grid', gap: 'var(--sp-4)', borderLeft: '3px solid var(--accent)' }}>
-          <p className="label">Continue learning</p>
-          <div className="row">
-            <h2 style={{ fontSize: 'var(--fs-20)', fontWeight: 600 }}>
-              {currentPath.title}
-            </h2>
+      {status === 'loading' && (
+        <div aria-busy="true" aria-label="Loading your progress">
+          <div className="skeleton" style={{ height: 96, marginBottom: 'var(--sp-4)' }} />
+          <div className="grid grid-3">
+            <div className="skeleton" style={{ height: 84 }} />
+            <div className="skeleton" style={{ height: 84 }} />
+            <div className="skeleton" style={{ height: 84 }} />
           </div>
-          <p className="muted fs-14" style={{ marginTop: '-8px' }}>
-            {nextLesson.module} → {nextLesson.title} · {nextLesson.minutes} min
-          </p>
-          <div className="row">
-            <Link className="btn btn-primary" to={`/lesson/${nextLesson.id}`}>
-              Continue
-              <Icon name="arrowR" size={14} />
-            </Link>
-            <span className="muted fs-12 mono">
-              {doneCount} lesson{doneCount === 1 ? '' : 's'} done so far
-            </span>
-          </div>
-          {currentPath && (
-            <ProgressBar ratio={pathCompletion(progress, currentPath.id).ratio} label={currentPath.title} />
-          )}
-        </section>
-      ) : (
-        <section className="panel panel-pad rise">
-          <p className="label">Start here</p>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <section className="panel panel-pad rise" role="alert">
+          <p className="label">something went wrong</p>
           <h2 style={{ fontSize: 'var(--fs-20)', fontWeight: 600, marginTop: 'var(--sp-2)' }}>
-            Your first line is one click away
+            We couldn't load the curriculum
           </h2>
           <p className="muted fs-14" style={{ maxWidth: '60ch', marginTop: 'var(--sp-2)' }}>
-            Pick a beginner path. No account needed — progress lives in this browser.
+            Check your connection and try again — your progress is safe in this browser.
           </p>
           <div className="row" style={{ marginTop: 'var(--sp-4)' }}>
-            <Link className="btn btn-primary" to="/paths">
-              See learning paths
-              <Icon name="arrowR" size={14} />
-            </Link>
+            <button className="btn btn-primary" onClick={retry}>
+              Try again
+              <Icon name="rotate" size={14} />
+            </button>
             <Link className="btn btn-secondary" to="/playground">
               Just try the editor
             </Link>
@@ -78,118 +139,157 @@ export function Home() {
         </section>
       )}
 
-      {/* Stats strip */}
-      <section className="grid grid-3 section-gap">
-        <div className="panel panel-pad">
-          <p className="label">lessons done</p>
-          <p className="mono" style={{ fontSize: 'var(--fs-28)', fontWeight: 600 }}>
-            {doneCount}
-            <span className="muted fs-12"> / {PATHS.reduce((n, p) => n + p.lessons.length, 0)}</span>
-          </p>
-        </div>
-        <div className="panel panel-pad">
-          <p className="label">days active</p>
-          <p className="mono" style={{ fontSize: 'var(--fs-28)', fontWeight: 600 }}>
-            {daysActive}
-          </p>
-        </div>
-        <div className="panel panel-pad">
-          <p className="label">challenges solved</p>
-          <p className="mono" style={{ fontSize: 'var(--fs-28)', fontWeight: 600 }}>
-            {completedChallenges}
-            <span className="muted fs-12"> / {CHALLENGES.length}</span>
-          </p>
-        </div>
-      </section>
-
-      {/* Next up */}
-      {nextLesson && (
-        <section className="section-gap">
-          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 'var(--sp-3)' }}>
-            <h2 className="page-title" style={{ fontSize: 'var(--fs-20)', marginTop: 0 }}>
-              Up next in {currentPath?.title ?? 'your path'}
-            </h2>
-            <Link className="btn btn-secondary btn-sm" to={`/paths/${currentPath?.id}`}>
-              Open path
-            </Link>
-          </div>
-          <ol className="journey" role="list">
-            {(currentPath?.lessons ?? []).slice(0, 4).map((l) => {
-              const state = progress.completed[l.id] ? 'done' : l.id === nextLesson.id ? 'current' : 'todo'
-              return (
-                <li key={l.id} className="journey-item" data-state={state}>
-                  <span className="journey-node" aria-hidden="true">
-                    {state === 'done' ? <Icon name="check" size={14} /> : state === 'current' ? <Icon name="chevronR" size={14} /> : <Icon name="lock" size={12} />}
-                  </span>
-                  <Link className="journey-title" to={`/lesson/${l.id}`} style={{ textDecoration: 'none' }}>
-                    {l.title}
-                    <span className="journey-meta">{l.minutes} min</span>
-                  </Link>
-                </li>
-              )
-            })}
-            <li>
-              <Link className="btn btn-ghost" to={`/paths/${currentPath?.id}`} style={{ textDecoration: 'none' }}>
-                See the full checklist
-                <Icon name="arrowR" size={14} />
-              </Link>
-            </li>
-          </ol>
-        </section>
-      )}
-
-      {/* Skill snapshot */}
-      <section className="section-gap">
-        <h2 className="page-title" style={{ fontSize: 'var(--fs-20)', marginTop: 0 }}>
-          Skill snapshot
-        </h2>
-        <p className="muted fs-14" style={{ maxWidth: 60 }}>
-          Progress by skill, not one big percentage.
-        </p>
-        <div className="grid grid-2 section-gap" style={{ display: 'grid', gap: 'var(--sp-4)' }}>
-          {skills.map((s) => (
-            <div key={s.skill} className="panel panel-pad" style={{ display: 'grid', gap: 'var(--sp-2)' }}>
-              <div className="row" style={{ justifyContent: 'space-between' }}>
-                <span style={{ fontWeight: 600, fontSize: 'var(--fs-14)' }}>{s.skill}</span>
-                <span className="mono fs-12 muted">
-                  {s.done}/{s.total}
+      {status === 'ready' && data && (
+        <>
+          {/* Dominant: continue card */}
+          {started && nextId && nextMeta ? (
+            <section
+              className="panel panel-pad rise"
+              style={{ display: 'grid', gap: 'var(--sp-4)', borderLeft: '3px solid var(--accent)' }}
+            >
+              <p className="label">Continue learning</p>
+              <div className="row">
+                <h2 style={{ fontSize: 'var(--fs-20)', fontWeight: 600 }}>{nextMeta.pathTitle}</h2>
+              </div>
+              <p className="muted fs-14" style={{ marginTop: '-8px' }}>
+                {nextMeta.moduleTitle} → {nextMeta.lessonTitle}
+              </p>
+              <div className="row">
+                <Link className="btn btn-primary" to={`/lesson/${nextId}`}>
+                  Continue
+                  <Icon name="arrowR" size={14} />
+                </Link>
+                <span className="muted fs-12 mono">
+                  {doneCount} lesson{doneCount === 1 ? '' : 's'} done so far
                 </span>
               </div>
-              <ProgressBar ratio={s.total ? s.done / s.total : 0} label={s.skill} />
-            </div>
-          ))}
-        </div>
-        <Link className="btn btn-secondary btn-sm" to="/progress" style={{ marginTop: 'var(--sp-4)' }}>
-          Full progress page
-        </Link>
-      </section>
+              {pathProgress.total > 0 && (
+                <ProgressBar ratio={pathProgress.ratio} label={nextMeta.pathTitle} />
+              )}
+            </section>
+          ) : (
+            <section className="panel panel-pad rise">
+              <p className="label">{allDone ? 'All done' : 'Start here'}</p>
+              <h2 style={{ fontSize: 'var(--fs-20)', fontWeight: 600, marginTop: 'var(--sp-2)' }}>
+                {allDone ? "You've finished everything here" : 'Your first line is one click away'}
+              </h2>
+              <p className="muted fs-14" style={{ maxWidth: '60ch', marginTop: 'var(--sp-2)' }}>
+                {allDone
+                  ? 'Try a challenge to keep the streak going.'
+                  : 'Pick a beginner path. No account needed — progress lives in this browser.'}
+              </p>
+              <div className="row" style={{ marginTop: 'var(--sp-4)' }}>
+                <Link className="btn btn-primary" to={allDone ? '/challenges' : '/paths'}>
+                  {allDone ? 'Try a challenge' : 'See learning paths'}
+                  <Icon name="arrowR" size={14} />
+                </Link>
+                <Link className="btn btn-secondary" to="/playground">
+                  Just try the editor
+                </Link>
+              </div>
+            </section>
+          )}
 
-      {/* Quick links */}
-      <section className="section-gap">
-        <h2 className="page-title" style={{ fontSize: 'var(--fs-20)', marginTop: 0 }}>
-          Quick jump
-        </h2>
-        <div className="grid grid-3 section-gap">
-          <Link className="card" to="/paths">
-            <span className="card-title">Paths</span>
-            <p className="card-sub" style={{ marginTop: 'var(--sp-1)' }}>
-              Completed · current · upcoming — the full checklist.
-            </p>
-          </Link>
-          <Link className="card" to="/challenges">
-            <span className="card-title">Challenges</span>
-            <p className="card-sub" style={{ marginTop: 'var(--sp-1)' }}>
-              Short, graded practice problems.
-            </p>
-          </Link>
-          <Link className="card" to="/playground">
-            <span className="card-title">Playground</span>
-            <p className="card-sub" style={{ marginTop: 'var(--sp-1)' }}>
-              Open editor, no lesson attached. Save & share.
-            </p>
-          </Link>
-        </div>
-      </section>
+          {/* Stats strip */}
+          <section className="grid grid-3 section-gap">
+            <div className="panel panel-pad">
+              <p className="label">lessons done</p>
+              <p className="mono" style={{ fontSize: 'var(--fs-28)', fontWeight: 600 }}>
+                {doneCount}
+                <span className="muted fs-12"> / {done.total}</span>
+              </p>
+            </div>
+            <div className="panel panel-pad">
+              <p className="label">days active</p>
+              <p className="mono" style={{ fontSize: 'var(--fs-28)', fontWeight: 600 }}>
+                {daysActive}
+              </p>
+            </div>
+            <div className="panel panel-pad">
+              <p className="label">challenges solved</p>
+              <p className="mono" style={{ fontSize: 'var(--fs-28)', fontWeight: 600 }}>
+                {completedChallenges}
+                <span className="muted fs-12"> / {CHALLENGES.length}</span>
+              </p>
+            </div>
+          </section>
+
+          {/* Next up */}
+          {nextId && nextMeta && (
+            <section className="section-gap">
+              <div className="row" style={{ justifyContent: 'space-between', marginBottom: 'var(--sp-3)' }}>
+                <h2 className="page-title" style={{ fontSize: 'var(--fs-20)', marginTop: 0 }}>
+                  Up next in {nextMeta.pathTitle}
+                </h2>
+                <Link className="btn btn-secondary btn-sm" to={`/paths/${nextMeta.pathId}`}>
+                  Open path
+                </Link>
+              </div>
+              <ol className="journey" role="list">
+                {(data.lessonsByPath[nextMeta.pathId] ?? []).slice(0, 4).map((l) => {
+                  const lessonStatus = progress.lessons[l.id]?.status
+                  const state =
+                    lessonStatus === 'passed' || lessonStatus === 'completed'
+                      ? 'done'
+                      : l.id === nextId
+                        ? 'current'
+                        : 'todo'
+                  return (
+                    <li key={l.id} className="journey-item" data-state={state}>
+                      <span className="journey-node" aria-hidden="true">
+                        {state === 'done' ? (
+                          <Icon name="check" size={14} />
+                        ) : state === 'current' ? (
+                          <Icon name="chevronR" size={14} />
+                        ) : (
+                          <Icon name="lock" size={12} />
+                        )}
+                      </span>
+                      <Link className="journey-title" to={`/lesson/${l.id}`} style={{ textDecoration: 'none' }}>
+                        {l.title}
+                        <span className="journey-meta">{data.lessonMeta[l.id]?.moduleTitle}</span>
+                      </Link>
+                    </li>
+                  )
+                })}
+                <li>
+                  <Link className="btn btn-ghost" to={`/paths/${nextMeta.pathId}`} style={{ textDecoration: 'none' }}>
+                    See the full checklist
+                    <Icon name="arrowR" size={14} />
+                  </Link>
+                </li>
+              </ol>
+            </section>
+          )}
+
+          {/* Quick links */}
+          <section className="section-gap">
+            <h2 className="page-title" style={{ fontSize: 'var(--fs-20)', marginTop: 0 }}>
+              Quick jump
+            </h2>
+            <div className="grid grid-3 section-gap">
+              <Link className="card" to="/paths">
+                <span className="card-title">Paths</span>
+                <p className="card-sub" style={{ marginTop: 'var(--sp-1)' }}>
+                  Completed · current · upcoming — the full checklist.
+                </p>
+              </Link>
+              <Link className="card" to="/challenges">
+                <span className="card-title">Challenges</span>
+                <p className="card-sub" style={{ marginTop: 'var(--sp-1)' }}>
+                  Short, graded practice problems.
+                </p>
+              </Link>
+              <Link className="card" to="/playground">
+                <span className="card-title">Playground</span>
+                <p className="card-sub" style={{ marginTop: 'var(--sp-1)' }}>
+                  Open editor, no lesson attached. Save & share.
+                </p>
+              </Link>
+            </div>
+          </section>
+        </>
+      )}
     </div>
   )
 }
