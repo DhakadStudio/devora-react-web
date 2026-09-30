@@ -3,6 +3,13 @@ import { browserJsProvider } from './browser-js'
 import { judge0Provider } from './judge0'
 
 export type { ExecLimits, ExecRequest, ExecResult, ExecStatus, ExecutionProvider } from './types'
+export {
+  createInteractiveRunner,
+  type InteractiveRunner,
+  type InteractiveState,
+  type TerminalLine,
+  type TerminalLineType
+} from './interactive'
 
 export const DEFAULT_LIMITS: ExecLimits = { timeoutMs: 10_000, maxOutputBytes: 256_000 }
 

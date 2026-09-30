@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { CodeEditor } from '../components/CodeEditor'
 import { ErrorExplain } from '../components/OutputBar'
+import { Terminal } from '../components/Terminal'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
 import { FullscreenButton } from '../components/FullscreenButton'
-import { runCode, type ExecResult } from '../engines/execution'
+import { runCode, createInteractiveRunner, type ExecResult, type InteractiveRunner } from '../engines/execution'
 
 type PlaygroundLanguage =
   | 'javascript'
@@ -92,7 +93,6 @@ function clearDraft(language: PlaygroundLanguage): void {
 export function Playground() {
   const [language, setLanguage] = useState<PlaygroundLanguage>('javascript')
   const [code, setCode] = useState(() => loadDraft('javascript'))
-  const [stdin, setStdin] = useState('')
   const [result, setResult] = useState<ExecResult | null>(null)
   const windowRef = useRef<HTMLElement | null>(null)
   const [running, setRunning] = useState(false)
@@ -101,6 +101,28 @@ export function Playground() {
   const runSeqRef = useRef(0)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const outputRef = useRef<HTMLDivElement | null>(null)
+  const [started, setStarted] = useState(false)
+
+  // Compiled languages get the dynamic terminal (run → type input on the
+  // prompt line → the program silently re-runs with it). The runner owns the
+  // terminal state; it is recreated per language so collected input never
+  // leaks across languages.
+  const isCompiled = language !== 'javascript'
+  const codeRef = useRef(code)
+  codeRef.current = code
+  const runnerRef = useRef<InteractiveRunner | null>(null)
+  const [runnerVersion, setRunnerVersion] = useState(0)
+
+  useEffect(() => {
+    if (!isCompiled) {
+      runnerRef.current = null
+      setRunnerVersion((v) => v + 1)
+      return
+    }
+    const lang = language
+    runnerRef.current = createInteractiveRunner({ language: lang, getCode: () => codeRef.current })
+    setRunnerVersion((v) => v + 1)
+  }, [language])
 
   // Language switch: load that language's draft, drop the previous result.
   useEffect(() => {
@@ -136,18 +158,29 @@ export function Playground() {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
     }
+    setStarted(false)
+    if (isCompiled) {
+      runnerRef.current?.reset()
+      return
+    }
     setCode(STARTER[language])
     setResult(null)
     clearDraft(language)
   }
 
   // Runs through the execution engine ONLY — javascript → browser provider,
-  // python → judge0. The page never constructs provider requests itself.
+  // compiled languages → judge0 via the interactive runner. The page never
+  // constructs provider requests itself.
   async function run() {
+    setStarted(true)
+    if (isCompiled) {
+      void runnerRef.current?.run()
+      return
+    }
     const seq = ++runSeqRef.current
     setRunning(true)
     try {
-      const r = await runCode({ language, code, stdin })
+      const r = await runCode({ language, code })
       if (runSeqRef.current === seq) setResult(r)
     } catch {
       if (runSeqRef.current === seq) {
@@ -262,21 +295,12 @@ export function Playground() {
             ref={outputRef}
             style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', minHeight: 320 }}
           >
-            <div className="stdin-panel">
-              <label htmlFor="pg-stdin" className="label">
-                Input (stdin) — what your program reads
-              </label>
-              <textarea
-                id="pg-stdin"
-                className="stdin-input mono"
-                value={stdin}
-                onChange={(e) => setStdin(e.target.value)}
-                placeholder={'One value per line, e.g.\n42\nDevora'}
-                rows={3}
-                spellCheck={false}
-                aria-label="Program input (stdin)"
-              />
-            </div>
+            {isCompiled ? (
+              <div style={{ display: 'flex', flexDirection: 'column', minHeight: 320, height: '100%' }}>
+                {runnerRef.current && <Terminal key={runnerVersion} runner={runnerRef.current} started={started} />}
+              </div>
+            ) : (
+              <>
             <div className="output-bar" role="status" aria-live="polite">
               {running && (
                 <span className="output-quiet">
@@ -318,6 +342,8 @@ export function Playground() {
               <p className="muted fs-12 mono" style={{ padding: 'var(--sp-3) var(--sp-4)' }}>
                 Run the file to see output.
               </p>
+            )}
+              </>
             )}
           </div>
         </div>
