@@ -127,8 +127,7 @@ export function Playground() {
   )
 
   function pickLanguage(id: string) {
-    if (id !== 'javascript' && id !== 'python') return
-    setLanguage(id)
+    setLanguage(id as PlaygroundLanguage)
   }
 
   function reset() {
@@ -176,23 +175,30 @@ export function Playground() {
         sub="No lesson here. Just you, an editor, and the run button. Your draft saves itself per language as you type."
       />
 
-      <div
-        className="lang-strip"
-        role="group"
-        aria-label="Playground language"
-        style={{ marginBottom: 'var(--sp-4)' }}
-      >
-        {LANGUAGES.map((l) => (
-          <button
-            key={l.id}
-            type="button"
-            className="lang-tab"
-            aria-pressed={language === l.id}
-            onClick={() => pickLanguage(l.id)}
+      <div className="row" style={{ marginBottom: 'var(--sp-4)', flexWrap: 'wrap', gap: 'var(--sp-3)' }}>
+        <label className="select-wrap">
+          <span className="label" style={{ marginRight: 'var(--sp-2)' }}>
+            Language
+          </span>
+          <select
+            className="select mono"
+            value={language}
+            onChange={(e) => pickLanguage(e.target.value)}
+            aria-label="Playground language"
           >
-            {l.label}
-          </button>
-        ))}
+            {LANGUAGES.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+          <Icon name="chevronD" size={14} />
+        </label>
+        <span className="muted fs-13" style={{ alignSelf: 'center' }}>
+          {language === 'javascript'
+            ? 'runs in your browser — instant'
+            : 'runs on the compiler — takes a few seconds'}
+        </span>
       </div>
 
       <section ref={windowRef} className="window" aria-label="Playground editor" style={{ minHeight: '60dvh' }}>

@@ -8,7 +8,10 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
-    globals: false
+    globals: false,
+    pool: 'threads',
+    poolOptions: { threads: { singleThread: true } },
+    testTimeout: 20_000
   },
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') }

@@ -84,7 +84,8 @@ const DARK_THEME = {
     'editorCursor.foreground': '#2AD4F0',
     'editor.selectionBackground': 'rgba(8,145,178,0.30)',
     'editor.inactiveSelectionBackground': 'rgba(8,145,178,0.15)',
-    'editor.lineHighlightBackground': 'rgba(8,145,178,0.06)',
+    'editor.lineHighlightBackground': 'rgba(42,212,240,0.09)',
+    'editor.lineHighlightBorder': '#00000000',
     'editorIndentGuide.background1': '#1F2126',
     'editorIndentGuide.activeBackground1': '#2E3238',
     'editorWidget.background': '#1B1D21',
@@ -117,6 +118,7 @@ const LIGHT_THEME = {
     'editor.selectionBackground': 'rgba(8,145,178,0.22)',
     'editor.inactiveSelectionBackground': 'rgba(8,145,178,0.10)',
     'editor.lineHighlightBackground': 'rgba(8,145,178,0.05)',
+    'editor.lineHighlightBorder': '#00000000',
     'editorIndentGuide.background1': '#E3E3DF',
     'editorIndentGuide.activeBackground1': '#C7C9CE',
     'editorWidget.background': '#FBFBFA',
@@ -128,9 +130,9 @@ const LIGHT_THEME = {
     'scrollbarSlider.background': 'rgba(26,27,30,0.20)',
     'scrollbarSlider.hoverBackground': 'rgba(26,27,30,0.35)',
     'scrollbarSlider.activeBackground': 'rgba(8,145,178,0.40)',
-    'editorBracketHighlight.foreground1': '0E7490',
-    'editorBracketHighlight.foreground2': '92400E',
-    'editorBracketHighlight.foreground3': '166534',
+    'editorBracketHighlight.foreground1': '#0E7490',
+    'editorBracketHighlight.foreground2': '#92400E',
+    'editorBracketHighlight.foreground3': '#166534',
     'editorGutter.background': '#FFFFFF',
     'editorOverviewRuler.border': '#FFFFFF'
   }
@@ -177,6 +179,7 @@ export function CodeEditor({ value, onChange, language = 'javascript', readOnly 
       >
         <Monaco
           height="100%"
+          language={monacoLanguage}
           defaultLanguage={monacoLanguage}
           path={`file.${language === 'javascript' ? 'js' : language}`}
           value={value}
@@ -195,7 +198,7 @@ export function CodeEditor({ value, onChange, language = 'javascript', readOnly 
             lineHeight: 1.7,
             padding: { top: 14, bottom: 14 },
             scrollBeyondLastLine: false,
-            renderLineHighlight: 'all',
+            renderLineHighlight: 'line',
             overviewRulerLanes: 0,
             hideCursorInOverviewRuler: true,
             cursorBlinking: 'smooth',
