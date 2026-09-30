@@ -102,7 +102,7 @@ function Shell() {
               {/* Splat, not :lessonId — real lesson ids contain slashes ("module/lesson") and a
                   dynamic param matches a single segment, which 404'd every real lesson link. */}
               <Route path="/lesson/*" element={<Lesson />} />
-              <Route path="/project/:projectId" element={<Project />} />
+              <Route path="/project/*" element={<Project />} />
               <Route path="/playground" element={<Playground />} />
               <Route path="/progress" element={<Progress />} />
               <Route path="/profile" element={<Profile />} />
