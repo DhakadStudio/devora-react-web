@@ -1,5 +1,7 @@
 # Devora V1 (Tier 1 core loop) — Spec + Implementation Plan
 
+**STATUS: COMPLETE (2026-09-28)** — all 12 tasks done, merged to main, pushed. Ledger record lives in git history (v1-core branch merge). RLS verified via SQL tests; critical loop E2E passing (guest + signed-in); 143/143 units; typecheck + build clean.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build Devora V1 — the Tier 1 core loop (curriculum discovery → lesson engine → exercise engine → workspace → run/pass/progress-saved), architected around five engines so every Tier 2-4 feature can be added later as new modules, not rewrites.
