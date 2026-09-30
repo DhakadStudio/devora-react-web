@@ -4,7 +4,7 @@ import { useAuth, signOut } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { useProgress } from '../engines/progress'
 import { CHALLENGES } from '../lib/curriculum'
-import { listPaths, listCourses, listModules, listLessons } from '../engines/curriculum'
+import { listPathsTree } from '../engines/curriculum'
 import { useSnippets } from '../lib/snippets'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
@@ -28,15 +28,12 @@ export function Profile() {
 
   useEffect(() => {
     let cancelled = false
-    listPaths().then(async (paths) => {
+    listPathsTree().then((tree) => {
       let count = 0
-      for (const p of paths) {
-        const courses = await listCourses(p.id)
-        for (const c of courses) {
-          const modules = await listModules(c.id)
-          for (const m of modules) {
-            const lessons = await listLessons(m.id)
-            count += lessons.length
+      for (const p of tree) {
+        for (const c of p.courses) {
+          for (const m of c.modules) {
+            count += m.lessons.length
           }
         }
       }

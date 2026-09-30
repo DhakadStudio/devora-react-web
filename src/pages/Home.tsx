@@ -4,10 +4,7 @@ import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
 import { CHALLENGES } from '../lib/curriculum'
 import {
-  listPaths,
-  listCourses,
-  listModules,
-  listLessons,
+  listPathsTree,
   type PathSummary,
   type LessonRef
 } from '../engines/curriculum'
@@ -29,17 +26,17 @@ interface CurriculumData {
   allLessonIds: string[]
 }
 
-/** One DB traversal: paths → courses → modules → lessons, composed into flat lookups. */
+/** One DB request: the whole curriculum tree, composed into flat lookups. */
 async function loadCurriculum(): Promise<CurriculumData> {
-  const paths = await listPaths()
+  const tree = await listPathsTree()
   const lessonMeta: Record<string, LessonMeta> = {}
   const lessonsByPath: Record<string, LessonRef[]> = {}
   const allLessonIds: string[] = []
-  for (const path of paths) {
+  for (const path of tree) {
     const lessons: LessonRef[] = []
-    for (const course of await listCourses(path.id)) {
-      for (const mod of await listModules(course.id)) {
-        for (const lesson of await listLessons(mod.id)) {
+    for (const course of path.courses) {
+      for (const mod of course.modules) {
+        for (const lesson of mod.lessons) {
           lessons.push(lesson)
           lessonMeta[lesson.id] = {
             pathId: path.id,
@@ -53,7 +50,7 @@ async function loadCurriculum(): Promise<CurriculumData> {
     lessonsByPath[path.id] = lessons
     allLessonIds.push(...lessons.map((l) => l.id))
   }
-  return { paths, lessonMeta, lessonsByPath, allLessonIds }
+  return { paths: tree, lessonMeta, lessonsByPath, allLessonIds }
 }
 
 export function Home() {

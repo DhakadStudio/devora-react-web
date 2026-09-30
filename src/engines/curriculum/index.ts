@@ -47,6 +47,23 @@ export interface LessonRef {
   position: number
 }
 
+export interface LessonTreeItem extends LessonRef {
+  moduleId: string
+  content: LessonContent | null
+}
+
+export interface ModuleTree extends ModuleSummary {
+  lessons: LessonTreeItem[]
+}
+
+export interface CourseTree extends CourseSummary {
+  modules: ModuleTree[]
+}
+
+export interface PathTree extends PathSummary {
+  courses: CourseTree[]
+}
+
 export interface Lesson extends LessonRef {
   moduleId: string
   content: LessonContent | null
@@ -211,3 +228,209 @@ export async function getExercise(exerciseId: string): Promise<Exercise | null> 
     }
   })
 }
+
+const TREE_SELECT = '*, courses(*, modules(*, lessons(*, exercises(*))))'
+const TREE_CACHE_KEY = 'devora-curriculum-cache'
+const TREE_REVALIDATE_MS = 30 * 1000
+
+interface TreeCachePayload {
+  savedAt: number
+  tree: PathTree[]
+}
+
+function hydrateCaches(tree: PathTree[]): void {
+  const paths: PathSummary[] = []
+  const coursesByPath = new Map<string, CourseSummary[]>()
+  const modulesByCourse = new Map<string, ModuleSummary[]>()
+  const lessonsByModule = new Map<string, LessonRef[]>()
+
+  for (const path of tree) {
+    const courseSummaries: CourseSummary[] = []
+    paths.push({
+      id: path.id,
+      title: path.title,
+      summary: path.summary,
+      level: path.level,
+      hours: path.hours,
+      prerequisites: path.prerequisites,
+      outcomes: path.outcomes
+    })
+    cache.set(`path:${path.id}`, paths[paths.length - 1])
+
+    for (const course of [...path.courses].sort((a, b) => a.position - b.position)) {
+      courseSummaries.push({ id: course.id, title: course.title, summary: course.summary, position: course.position })
+      cache.set(`course:${course.id}`, courseSummaries[courseSummaries.length - 1])
+
+      const moduleSummaries: ModuleSummary[] = []
+      for (const moduleRow of [...course.modules].sort((a, b) => a.position - b.position)) {
+        moduleSummaries.push({ id: moduleRow.id, title: moduleRow.title, summary: moduleRow.summary, position: moduleRow.position })
+        cache.set(`module:${moduleRow.id}`, moduleSummaries[moduleSummaries.length - 1])
+
+        const lessonRefs: LessonRef[] = []
+        for (const lesson of [...moduleRow.lessons].sort((a, b) => a.position - b.position)) {
+          lessonRefs.push({ id: lesson.id, title: lesson.title, position: lesson.position })
+          cache.set(`lesson:${lesson.id}`, {
+            id: lesson.id,
+            title: lesson.title,
+            position: lesson.position,
+            moduleId: lesson.moduleId,
+            content: lesson.content
+          })
+        }
+        lessonsByModule.set(moduleRow.id, lessonRefs)
+      }
+      modulesByCourse.set(course.id, moduleSummaries)
+    }
+    coursesByPath.set(path.id, courseSummaries)
+  }
+
+  for (const [pathId, courses] of coursesByPath) cache.set(`courses:${pathId}`, courses)
+  for (const [courseId, modules] of modulesByCourse) cache.set(`modules:${courseId}`, modules)
+  for (const [moduleId, lessons] of lessonsByModule) cache.set(`lessons:${moduleId}`, lessons)
+}
+
+function hydrateExerciseCache(row: {
+  id: string
+  title: string
+  position: number
+  lesson_id: string
+  content: Json
+}): void {
+  const parsed = parseExerciseContent(row.content)
+  cache.set(`exercise:${row.id}`, {
+    id: row.id,
+    title: row.title,
+    position: row.position,
+    lessonId: row.lesson_id,
+    content: parsed.ok ? parsed.data : null
+  })
+}
+
+function mapTreeRows(data: {
+  id: string
+  title: string
+  summary: string | null
+  level: string | null
+  hours: number | null
+  prerequisites: string | null
+  outcomes: Json
+  courses?: {
+    id: string
+    title: string
+    summary: string | null
+    position: number
+    modules?: {
+      id: string
+      title: string
+      summary: string | null
+      position: number
+      lessons?: {
+        id: string
+        title: string
+        position: number
+        module_id: string
+        content: Json
+        exercises?: {
+          id: string
+          title: string
+          position: number
+          lesson_id: string
+          content: Json
+        }[]
+      }[]
+    }[]
+  }[]
+}[]): PathTree[] {
+  return (data ?? []).map((pathRow) => ({
+    ...mapPath(pathRow),
+    courses: (pathRow.courses ?? [])
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((courseRow) => ({
+        ...mapSummary(courseRow),
+        modules: (courseRow.modules ?? [])
+          .slice()
+          .sort((a, b) => a.position - b.position)
+          .map((moduleRow) => ({
+            ...mapSummary(moduleRow),
+            lessons: (moduleRow.lessons ?? [])
+              .slice()
+              .sort((a, b) => a.position - b.position)
+              .map((lessonRow) => {
+                for (const exerciseRow of lessonRow.exercises ?? []) hydrateExerciseCache(exerciseRow)
+                const parsed = parseLessonContent(lessonRow.content)
+                return {
+                  id: lessonRow.id,
+                  title: lessonRow.title,
+                  position: lessonRow.position,
+                  moduleId: lessonRow.module_id,
+                  content: parsed.ok ? parsed.data : null
+                }
+              })
+          }))
+      }))
+  }))
+}
+
+async function fetchTree(): Promise<PathTree[]> {
+  const client = requireClient()
+  const { data, error } = await client.from('learning_paths').select(TREE_SELECT).order('title')
+  if (error) throw error
+  const tree = mapTreeRows(data ?? [])
+  hydrateCaches(tree)
+  return tree
+}
+
+function readTreeCache(): PathTree[] | null {
+  try {
+    const raw = sessionStorage.getItem(TREE_CACHE_KEY)
+    if (!raw) return null
+    const payload = JSON.parse(raw) as TreeCachePayload
+    if (!payload?.tree || !Array.isArray(payload.tree)) return null
+    return payload.tree
+  } catch {
+    return null
+  }
+}
+
+function writeTreeCache(tree: PathTree[]): void {
+  try {
+    const payload: TreeCachePayload = { savedAt: Date.now(), tree }
+    sessionStorage.setItem(TREE_CACHE_KEY, JSON.stringify(payload))
+  } catch {}
+}
+
+let revalidating = false
+
+function revalidateTree(): void {
+  if (revalidating) return
+  revalidating = true
+  fetchTree()
+    .then((fresh) => {
+      writeTreeCache(fresh)
+      revalidating = false
+    })
+    .catch(() => {
+      revalidating = false
+    })
+}
+
+export async function listPathsTree(): Promise<PathTree[]> {
+  const cached = readTreeCache()
+  if (cached) {
+    hydrateCaches(cached)
+    try {
+      const payload = JSON.parse(sessionStorage.getItem(TREE_CACHE_KEY)!) as TreeCachePayload
+      if (Date.now() - payload.savedAt > TREE_REVALIDATE_MS) revalidateTree()
+    } catch {}
+    return cached
+  }
+  try {
+    const tree = await fetchTree()
+    writeTreeCache(tree)
+    return tree
+  } catch {
+    return []
+  }
+}
+

@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
-import {
-  listPaths,
-  listCourses,
-  listModules,
-  listLessons,
-  type PathSummary
-} from '../engines/curriculum'
+import { listPathsTree, type PathSummary } from '../engines/curriculum'
 import { useProgress, pathCompletion } from '../engines/progress'
 import { Icon } from '../components/Icon'
 import { ProgressBar } from '../components/JourneyChecklist'
@@ -20,13 +14,13 @@ interface PathCard {
 
 /** Paths with their lesson ids (courses → modules → lessons) so progress can be derived. */
 async function loadPathCards(): Promise<PathCard[]> {
-  const paths = await listPaths()
+  const tree = await listPathsTree()
   const cards: PathCard[] = []
-  for (const path of paths) {
+  for (const path of tree) {
     const lessonIds: string[] = []
-    for (const course of await listCourses(path.id)) {
-      for (const mod of await listModules(course.id)) {
-        for (const lesson of await listLessons(mod.id)) lessonIds.push(lesson.id)
+    for (const course of path.courses) {
+      for (const mod of course.modules) {
+        for (const lesson of mod.lessons) lessonIds.push(lesson.id)
       }
     }
     cards.push({ path, lessonIds })

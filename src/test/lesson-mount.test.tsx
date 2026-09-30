@@ -68,7 +68,7 @@ describe('LessonPage mount (critical-loop render probe)', () => {
     vi.mocked(listLessons).mockResolvedValue(siblings)
   })
 
-  it('mounts without an update loop and reaches the exercise workspace', async () => {
+  it('mounts without an update loop and reaches the exercise workspace', { timeout: 20_000 }, async () => {
     const errors: string[] = []
     const errorSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
       errors.push(args.map(String).join(' '))

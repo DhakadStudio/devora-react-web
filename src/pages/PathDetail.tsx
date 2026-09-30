@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  getPath,
-  listCourses,
-  listModules,
-  listLessons,
+  listPathsTree,
   type PathSummary,
   type CourseSummary,
   type LessonRef
@@ -32,29 +29,29 @@ interface PathDetailData {
   lessonTitles: Record<string, string>
 }
 
-/** Path → courses → modules (+ per-module project) → lessons, composed into flat lookups. */
+/** One DB request (the curriculum tree) + parallel project lookups per module. */
 async function loadPathDetail(pathId: string): Promise<PathDetailData | null> {
-  const path = await getPath(pathId)
+  const tree = await listPathsTree()
+  const path = tree.find((p) => p.id === pathId)
   if (!path) return null
-  const courses = await listCourses(pathId)
+  const courses = path.courses.map((c) => ({ id: c.id, title: c.title, summary: c.summary, position: c.position }))
   const modulesByCourse: Record<string, ModuleDetail[]> = {}
   const allLessonIds: string[] = []
   const moduleByLesson: Record<string, string> = {}
   const lessonTitles: Record<string, string> = {}
-  for (const course of courses) {
-    const mods = await listModules(course.id)
-    const details: ModuleDetail[] = []
-    for (const mod of mods) {
-      const lessons = await listLessons(mod.id)
-      const project = await getProjectForModule(mod.id)
-      details.push({
-        id: mod.id,
-        title: mod.title,
-        lessons,
-        project: project ? { id: project.id, title: project.title } : null
-      })
-      for (const lesson of lessons) {
-        moduleByLesson[lesson.id] = mod.id
+  for (const course of path.courses) {
+    const projectLookup = await Promise.all(
+      course.modules.map(async (mod) => ({ mod, project: await getProjectForModule(mod.id) }))
+    )
+    const details: ModuleDetail[] = projectLookup.map(({ mod, project }) => ({
+      id: mod.id,
+      title: mod.title,
+      lessons: mod.lessons.map((l) => ({ id: l.id, title: l.title, position: l.position })),
+      project: project ? { id: project.id, title: project.title } : null
+    }))
+    for (const detail of details) {
+      for (const lesson of detail.lessons) {
+        moduleByLesson[lesson.id] = detail.id
         lessonTitles[lesson.id] = lesson.title
         allLessonIds.push(lesson.id)
       }
