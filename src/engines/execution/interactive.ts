@@ -67,6 +67,9 @@ export interface InteractiveRunner {
 
 export function createInteractiveRunner(ctx: {
   language: string
+  /** Optional provider pin (e.g. the workbench runs JavaScript on Node via
+   *  judge0). Unset = the registry's default routing. */
+  provider?: string
   getCode: () => string
 }): InteractiveRunner {
   let state: InteractiveState = {
@@ -119,7 +122,8 @@ export function createInteractiveRunner(ctx: {
       const result: ExecResult = await runCode({
         language: ctx.language,
         code: ctx.getCode(),
-        stdin
+        stdin,
+        provider: ctx.provider
       })
 
       const newStdout = result.stdout || ''

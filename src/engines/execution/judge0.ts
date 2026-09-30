@@ -9,23 +9,25 @@ import type { ExecRequest, ExecResult, ExecutionProvider } from './types'
 const JUDGE0_BASE_URL = 'https://ce.judge0.com'
 
 /** Judge0 language_id map — every entry verified compile+run on ce.judge0.com
- *  (2026-09-30). Adding an entry makes the registry route that language here
- *  automatically. javascript never routes here (browser provider handles it). */
+ *  (2026-09-30, matching the original Vue implementation's version picks).
+ *  Adding an entry makes the registry route that language here automatically. */
 const LANGUAGE_IDS: Record<string, number> = {
-  python: 71,
-  java: 62,
-  cpp: 105,
-  c: 103,
-  csharp: 51,
-  go: 60,
-  ruby: 72,
-  php: 68
-}
-
-const POLL_INTERVAL_MS = 250
-
-interface Judge0Submission {
-  token?: string
+  javascript: 102, // Node.js 22.08.0
+  typescript: 94, // TypeScript 5.0.3
+  python: 100, // Python 3.12.5
+  java: 91, // Java (JDK 17.0.6)
+  c: 103, // C (GCC 14.1.0)
+  cpp: 105, // C++ (GCC 14.1.0)
+  csharp: 51, // C# (Mono 6.6.0.161)
+  go: 107, // Go 1.23.5
+  rust: 108, // Rust 1.85.0
+  ruby: 72, // Ruby 2.7.0
+  php: 98, // PHP 8.3.11
+  kotlin: 111, // Kotlin 2.1.10
+  swift: 83, // Swift 5.2.3
+  bash: 46, // Bash 5.0.0
+  sql: 82, // SQL (SQLite 3.27.2)
+  r: 99 // R 4.4.1
 }
 
 interface Judge0Status {
@@ -40,13 +42,6 @@ interface Judge0Result {
   compile_output?: string | null
 }
 
-function encodeBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text)
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
-}
-
 /** Decodes base64 payloads. Trim nothing here — normalization is the
  *  learning engine's job. */
 function decodeBase64(encoded: string | null | undefined): string {
@@ -58,10 +53,6 @@ function decodeBase64(encoded: string | null | undefined): string {
 function messageOf(e: unknown): string {
   if (e instanceof Error) return e.message
   return String(e)
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -161,42 +152,49 @@ async function run(req: ExecRequest): Promise<ExecResult> {
       error: {
         message: `The code runner does not support "${req.language}" yet.`,
         expected: 'a language the runner can execute',
-        nextStep: 'Pick one of the supported languages — python, java, cpp, c, csharp, go, ruby and php are available.'
+        nextStep: 'Pick one of the supported languages from the language list.'
       }
     }
   }
 
-  const timeoutMs = req.limits?.timeoutMs ?? 10_000
+  const timeoutMs = req.limits?.timeoutMs ?? 15_000
 
+  // ONE request: wait=true holds the connection until the program finishes
+  // and the response IS the result (the original Vue implementation's mode —
+  // fewer requests per run than submit+poll, kinder to the free tier's rate
+  // limit). The client-side deadline is enforced with an AbortController.
+  const controller = new AbortController()
+  const deadline = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const submit = await fetchJson<Judge0Submission>(
-      `${JUDGE0_BASE_URL}/submissions?base64_encoded=true`,
+    const result = await fetchJson<Judge0Result>(
+      `${JUDGE0_BASE_URL}/submissions?base64_encoded=false&wait=true`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           language_id: languageId,
-          source_code: encodeBase64(req.code),
-          stdin: encodeBase64(req.stdin ?? '')
-        })
+          source_code: req.code,
+          stdin: req.stdin ?? ''
+        }),
+        signal: controller.signal
       }
     )
-    if (typeof submit.token !== 'string' || submit.token === '') {
-      throw new Error('The code runner did not return a submission token.')
-    }
-
-    const deadlineAt = Date.now() + timeoutMs
-    while (true) {
-      const result = await fetchJson<Judge0Result>(
-        `${JUDGE0_BASE_URL}/submissions/${submit.token}?base64_encoded=true`
-      )
-      const statusId = result.status?.id
-      if (statusId !== undefined && statusId >= 3) return mapTerminal(result)
-      const remaining = deadlineAt - Date.now()
-      if (remaining <= 0) return timeoutResult(result)
-      await sleep(Math.min(POLL_INTERVAL_MS, remaining))
-    }
+    const statusId = result.status?.id
+    if (statusId !== undefined && statusId >= 3) return mapTerminal(result)
+    return timeoutResult(result)
   } catch (e) {
+    if (controller.signal.aborted) {
+      return {
+        status: 'timeout',
+        stdout: '',
+        stderr: '',
+        error: {
+          message: 'The program did not finish within the time limit.',
+          expected: 'your program to finish within the time limit',
+          nextStep: 'Look for a loop that never ends or a wait that never finishes, and give it a way to stop.'
+        }
+      }
+    }
     const raw = messageOf(e)
     const isNetwork = /failed to fetch|networkerror|load failed/i.test(raw)
     const isRateLimit = /429/.test(raw)
@@ -222,6 +220,8 @@ async function run(req: ExecRequest): Promise<ExecResult> {
         nextStep
       }
     }
+  } finally {
+    clearTimeout(deadline)
   }
 }
 

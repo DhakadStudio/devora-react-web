@@ -6,6 +6,10 @@ export interface ExecRequest {
   code: string
   stdin?: string
   limits?: Partial<ExecLimits>
+  /** Optional provider pin — e.g. the workbench runs JavaScript on Node via
+   *  judge0 while lesson exercises keep the in-browser sandbox. Unset = the
+   *  registry's default routing for the language. */
+  provider?: string
 }
 
 export type ExecStatus = 'ok' | 'runtime-error' | 'timeout' | 'compile-error' | 'no-provider'

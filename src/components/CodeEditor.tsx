@@ -163,23 +163,60 @@ function registerTheme(monaco: MonacoLike, mode: 'dark' | 'light'): string {
   return mode === 'dark' ? 'devora-dark' : 'devora-light'
 }
 
+interface MonacoEditorInstance {
+  getAction: (id: string) => { run: () => Promise<void> } | null
+  executeEdits: (source: string, edits: { range: unknown; text: string }[]) => boolean
+  getModel: () => {
+    getFullModelRange: () => unknown
+    getValue: () => string
+  } | null
+  trigger: (source: string, id: string) => void
+}
+
+export interface EditorApi {
+  /** Formats the whole open file (editor action 'editor.action.formatDocument'). */
+  format: () => void
+  /** Whole-file replacement that KEEPS the undo stack — Undo afterwards
+   *  restores the code the learner had before the replacement. */
+  replaceWholeText: (v: string) => void
+}
+
 interface Props {
   value: string
   onChange: (v: string) => void
   language?: string
   readOnly?: boolean
+  autocomplete?: boolean
+  fontSize?: number
+  onFontSizeChange?: (n: number) => void
+  onReady?: (api: EditorApi) => void
 }
 
-export function CodeEditor({ value, onChange, language = 'javascript', readOnly = false }: Props) {
+export function CodeEditor({
+  value,
+  onChange,
+  language = 'javascript',
+  readOnly = false,
+  autocomplete = false,
+  fontSize: fontSizeProp,
+  onFontSizeChange,
+  onReady
+}: Props) {
   const { theme } = useTheme()
   const monacoLanguage = language === 'javascript' ? 'javascript' : language
   const hostRef = useRef<HTMLDivElement>(null)
-  const fontSizeRef = useRef(14)
-  const [fontSize, setFontSizeState] = useState(14)
-  const setFontSize = useCallback((n: number) => {
-    fontSizeRef.current = n
-    setFontSizeState(n)
-  }, [])
+  const fontSizeRef = useRef(fontSizeProp ?? 14)
+  const [fontSizeState, setFontSizeState] = useState(fontSizeProp ?? 14)
+  const fontSize = fontSizeProp ?? fontSizeState
+  const setFontSize = useCallback(
+    (n: number) => {
+      fontSizeRef.current = n
+      if (onFontSizeChange) onFontSizeChange(n)
+      else setFontSizeState(n)
+    },
+    [onFontSizeChange]
+  )
+  const editorRef = useRef<MonacoEditorInstance | null>(null)
 
   useEffect(() => {
     return attachEditorZoom(hostRef.current, () => fontSizeRef.current, setFontSize)
@@ -211,6 +248,22 @@ export function CodeEditor({ value, onChange, language = 'javascript', readOnly 
             registerTheme(monaco as unknown as MonacoLike, 'dark')
             registerTheme(monaco as unknown as MonacoLike, 'light')
           }}
+          onMount={(editor) => {
+            const instance = editor as unknown as MonacoEditorInstance
+            editorRef.current = instance
+            onReady?.({
+              format: () => {
+                instance.getAction('editor.action.formatDocument')?.run().catch(() => {})
+              },
+              replaceWholeText: (v: string) => {
+                const model = instance.getModel()
+                if (!model) return
+                instance.executeEdits('devora-reset', [
+                  { range: model.getFullModelRange(), text: v }
+                ])
+              }
+            })
+          }}
           theme={theme === 'dark' ? 'devora-dark' : 'devora-light'}
           options={{
             readOnly,
@@ -227,6 +280,8 @@ export function CodeEditor({ value, onChange, language = 'javascript', readOnly 
             cursorBlinking: 'smooth',
             cursorSmoothCaretAnimation: 'on',
             smoothScrolling: true,
+            quickSuggestions: autocomplete,
+            suggestOnTriggerCharacters: autocomplete,
             scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
             automaticLayout: true,
             tabSize: 2,

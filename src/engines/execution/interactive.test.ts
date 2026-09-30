@@ -6,10 +6,6 @@ function b64(text: string): string {
   return btoa(text)
 }
 
-function unb64(encoded: string): string {
-  return atob(encoded)
-}
-
 function jsonResponse(payload: Record<string, unknown>) {
   return {
     ok: true,
@@ -40,14 +36,14 @@ vi.stubGlobal('fetch', fetchMock)
 import { createInteractiveRunner } from './interactive'
 
 function queueSubmitResult(result: Record<string, unknown>) {
-  fetchQueue = [jsonResponse({ token: 'tok-1' }), jsonResponse(result)]
+  fetchQueue = [jsonResponse(result)]
 }
 
 function lastSubmitStdin(): string | null {
   for (let i = calls.length - 1; i >= 0; i--) {
     if (calls[i].url.includes('/submissions') && calls[i].body) {
       const parsed = JSON.parse(calls[i].body!) as { stdin?: string }
-      return parsed.stdin ? unb64(parsed.stdin) : ''
+      return parsed.stdin ?? ''
     }
   }
   return null

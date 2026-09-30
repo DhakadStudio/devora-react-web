@@ -18,10 +18,18 @@ const providers: readonly ExecutionProvider[] = [browserJsProvider, judge0Provid
 /** Language → provider lookup. Providers declare the languages they handle,
  *  so extending judge0's language map routes new non-JS languages here
  *  automatically. javascript → browser-js; everything else declared → judge0;
- *  undeclared languages → null (runCode answers with a no-provider error). */
-export function getProvider(language: string): ExecutionProvider | null {
+ *  undeclared languages → null (runCode answers with a no-provider error).
+ *  A request may pin the provider explicitly (req.provider). */
+export function getProvider(language: string, pinned?: string): ExecutionProvider | null {
   const key = language.trim().toLowerCase()
   if (key === '') return null
+  if (pinned) {
+    const pin = pinned.trim().toLowerCase()
+    const pinnedProvider = providers.find((p) => p.id === pin)
+    if (pinnedProvider && pinnedProvider.languages.some((name) => name.toLowerCase() === key)) {
+      return pinnedProvider
+    }
+  }
   return providers.find((provider) => provider.languages.some((name) => name.toLowerCase() === key)) ?? null
 }
 
@@ -47,7 +55,7 @@ function truncateToBytes(text: string, maxBytes: number): string {
 }
 
 export async function runCode(req: ExecRequest): Promise<ExecResult> {
-  const provider = getProvider(req.language)
+  const provider = getProvider(req.language, req.provider)
   if (!provider) return noProviderResult(req.language)
   const limits: ExecLimits = { ...DEFAULT_LIMITS, ...(req.limits ?? {}) }
   const result = await provider.run({ ...req, limits })

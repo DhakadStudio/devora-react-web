@@ -19,7 +19,7 @@ const PathDetail = lazy(() => import('./pages/PathDetail').then((m) => ({ defaul
 const Challenges = lazy(() => import('./pages/Challenges').then((m) => ({ default: m.Challenges })))
 const ChallengeDetail = lazy(() => import('./pages/ChallengeDetail').then((m) => ({ default: m.ChallengeDetail })))
 const Lesson = lazy(() => import('./pages/Lesson').then((m) => ({ default: m.LessonPage })))
-const Playground = lazy(() => import('./pages/Playground').then((m) => ({ default: m.Playground })))
+const Playground = lazy(() => import('./pages/Playground').then((m) => ({ default: m.PlaygroundPage })))
 const Progress = lazy(() => import('./pages/Progress').then((m) => ({ default: m.Progress })))
 const Profile = lazy(() => import('./pages/Profile').then((m) => ({ default: m.Profile })))
 const Login = lazy(() => import('./pages/Login').then((m) => ({ default: m.Login })))

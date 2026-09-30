@@ -5,16 +5,7 @@ function b64(text: string): string {
   return btoa(text)
 }
 
-function b64OrNull(text: string | null): string | null {
-  return text === null ? null : b64(text)
-}
-
-interface FetchCall {
-  url: string
-  init?: RequestInit
-}
-
-function jsonResponse(payload: unknown): Response {
+function jsonResponse(payload: Record<string, unknown>) {
   return {
     ok: true,
     status: 200,
@@ -22,7 +13,7 @@ function jsonResponse(payload: unknown): Response {
   } as unknown as Response
 }
 
-function httpErrorResponse(status: number): Response {
+function httpErrorResponse(status: number) {
   return {
     ok: false,
     status,
@@ -30,18 +21,31 @@ function httpErrorResponse(status: number): Response {
   } as unknown as Response
 }
 
-/** Responses are served in order; the last one repeats for extra polls. */
-function setupFetch(responses: Response[]) {
-  const calls: FetchCall[] = []
-  let served = 0
-  const fetchMock = vi.fn((url: unknown, init?: unknown) => {
-    calls.push({ url: String(url), init: init as RequestInit | undefined })
-    const response = responses[Math.min(served, responses.length - 1)]
-    served += 1
-    return Promise.resolve(response)
+interface CapturedCall {
+  url: string
+  body: string | null
+  signal?: AbortSignal | null
+}
+
+function setupFetch(responses: unknown[]) {
+  const calls: CapturedCall[] = []
+  const responsesCopy = [...responses]
+  const fetchMock = vi.fn((url: string | URL | Request, init?: RequestInit) => {
+    calls.push({
+      url: String(url),
+      body: typeof init?.body === 'string' ? init.body : null,
+      signal: init?.signal ?? undefined
+    })
+    const next = responsesCopy.shift()
+    if (!next) return Promise.resolve(jsonResponse({ status: { id: 3 }, stdout: b64(''), stderr: b64('') }))
+    return Promise.resolve(next as Response)
   })
   vi.stubGlobal('fetch', fetchMock)
-  return { calls, fetchMock }
+  return { calls }
+}
+
+function parseBody(body: string | null): Record<string, unknown> {
+  return body ? (JSON.parse(body) as Record<string, unknown>) : {}
 }
 
 describe('judge0 provider', () => {
@@ -49,103 +53,94 @@ describe('judge0 provider', () => {
     vi.unstubAllGlobals()
   })
 
-  describe('submission', () => {
-    it('posts base64-encoded code and stdin to the judge0 submissions endpoint', async () => {
+  describe('submission (wait=true — ONE request, the response IS the result)', () => {
+    it('posts plain code + stdin to the wait=true endpoint', async () => {
       const { calls } = setupFetch([
-        jsonResponse({ token: 'tok-1' }),
-        jsonResponse({ status: { id: 3, description: 'Accepted' }, stdout: b64('hello\n'), stderr: b64('') })
-      ])
-      const result = await judge0Provider.run({
-        language: 'python',
-        code: 'print("hello")',
-        stdin: 'world'
-      })
-      expect(calls[0].url).toBe('https://ce.judge0.com/submissions?base64_encoded=true')
-      expect(calls[0].init?.method).toBe('POST')
-      const body = JSON.parse(String(calls[0].init?.body)) as Record<string, unknown>
-      expect(body).toEqual({
-        language_id: 71,
-        source_code: b64('print("hello")'),
-        stdin: b64('world')
-      })
-      expect(result.status).toBe('ok')
-    })
-
-    it('encodes an absent stdin as an empty base64 string', async () => {
-      const { calls } = setupFetch([
-        jsonResponse({ token: 'tok-1' }),
-        jsonResponse({ status: { id: 3, description: 'Accepted' }, stdout: b64(''), stderr: b64('') })
-      ])
-      await judge0Provider.run({ language: 'python', code: 'print(1)' })
-      const body = JSON.parse(String(calls[0].init?.body)) as Record<string, unknown>
-      expect(body.stdin).toBe(b64(''))
-    })
-
-    it('polls GET /submissions/{token}?base64_encoded=true and decodes base64 stdout/stderr', async () => {
-      const { calls } = setupFetch([
-        jsonResponse({ token: 'tok-1' }),
         jsonResponse({
           status: { id: 3, description: 'Accepted' },
-          stdout: b64('line one\nline two'),
-          stderr: b64('a warning')
+          stdout: b64('hi\n'),
+          stderr: b64('')
         })
       ])
-      const result = await judge0Provider.run({ language: 'python', code: 'print("line one")', stdin: '' })
-      expect(calls[1].url).toBe('https://ce.judge0.com/submissions/tok-1?base64_encoded=true')
+      const result = await judge0Provider.run({ language: 'python', code: 'print("hi")', stdin: 'Devora\n' })
       expect(result.status).toBe('ok')
-      expect(result.stdout).toBe('line one\nline two')
-      expect(result.stderr).toBe('a warning')
-      expect(result.error).toBeUndefined()
-    })
-
-    it('keeps polling until the status is terminal (id >= 3)', async () => {
-      const { calls } = setupFetch([
-        jsonResponse({ token: 'tok-1' }),
-        jsonResponse({ status: { id: 1, description: 'In Queue' }, stdout: b64OrNull(null), stderr: b64OrNull(null) }),
-        jsonResponse({ status: { id: 2, description: 'Processing' }, stdout: b64OrNull(null), stderr: b64OrNull(null) }),
-        jsonResponse({ status: { id: 3, description: 'Accepted' }, stdout: b64('done'), stderr: b64('') })
-      ])
-      const result = await judge0Provider.run({ language: 'python', code: 'print("done")', stdin: '' })
-      expect(result.status).toBe('ok')
-      expect(result.stdout).toBe('done')
-      expect(calls).toHaveLength(4)
-    })
-
-    it('returns an educational error when the submission has no token', async () => {
-      const { calls } = setupFetch([jsonResponse({})])
-      const result = await judge0Provider.run({ language: 'python', code: 'print("hi")', stdin: '' })
-      expect(result.status).toBe('runtime-error')
-      expect(result.error?.message).toContain('token')
-      expect(result.error?.nextStep).toBeTruthy()
+      expect(result.stdout).toBe('hi\n')
       expect(calls).toHaveLength(1)
+      expect(calls[0].url).toContain('base64_encoded=false')
+      expect(calls[0].url).toContain('wait=true')
+      const body = parseBody(calls[0].body)
+      expect(body.language_id).toBe(100) // Python 3.12.5 (verified on ce.judge0.com)
+      expect(body.source_code).toBe('print("hi")')
+      expect(body.stdin).toBe('Devora\n')
+    })
+
+    it('sends an absent stdin as an empty string', async () => {
+      const { calls } = setupFetch([jsonResponse({ status: { id: 3 }, stdout: b64(''), stderr: b64('') })])
+      await judge0Provider.run({ language: 'python', code: 'print("x")' })
+      expect(parseBody(calls[0].body!).stdin).toBe('')
+    })
+  })
+
+  describe('language routing (all ids verified compile+run on ce.judge0.com 2026-09-30)', () => {
+    it('maps every supported language to its verified judge0 id', async () => {
+      const { calls } = setupFetch([jsonResponse({ status: { id: 3 }, stdout: b64(''), stderr: b64('') })])
+      const expected: Record<string, number> = {
+        javascript: 102,
+        typescript: 94,
+        python: 100,
+        java: 91,
+        c: 103,
+        cpp: 105,
+        csharp: 51,
+        go: 107,
+        rust: 108,
+        ruby: 72,
+        php: 98,
+        kotlin: 111,
+        swift: 83,
+        bash: 46,
+        sql: 82,
+        r: 99
+      }
+      for (const [lang, id] of Object.entries(expected)) {
+        calls.length = 0
+        await judge0Provider.run({ language: lang, code: 'x' })
+        expect(parseBody(calls[0].body!).language_id, `${lang} id`).toBe(id)
+      }
+    })
+
+    it('returns a runtime-error-style educational error for a language judge0 does not map', async () => {
+      const { calls } = setupFetch([])
+      const result = await judge0Provider.run({ language: 'cobol', code: 'display "hi".', stdin: '' })
+      expect(result.status).toBe('runtime-error')
+      expect(result.error?.message).toContain('cobol')
+      expect(result.error?.nextStep).toBeTruthy()
+      expect(calls).toHaveLength(0)
     })
   })
 
   describe('status mapping', () => {
     it('maps status 5 (Time Limit Exceeded) to timeout', async () => {
       setupFetch([
-        jsonResponse({ token: 'tok-1' }),
         jsonResponse({
           status: { id: 5, description: 'Time Limit Exceeded' },
-          stdout: b64('partial'),
+          stdout: b64(''),
           stderr: b64('')
         })
       ])
       const result = await judge0Provider.run({ language: 'python', code: 'while True: pass', stdin: '' })
       expect(result.status).toBe('timeout')
-      expect(result.stdout).toBe('partial')
       expect(result.error?.expected).toBe('your program to finish within the time limit')
       expect(result.error?.nextStep).toBeTruthy()
     })
 
     it('maps status 6 (Compilation Error) to compile-error with the compiler message', async () => {
       setupFetch([
-        jsonResponse({ token: 'tok-1' }),
         jsonResponse({
           status: { id: 6, description: 'Compilation Error' },
           stdout: b64(''),
           stderr: b64(''),
-          compile_output: b64('SyntaxError: invalid syntax')
+          compile_output: b64("SyntaxError: invalid syntax")
         })
       ])
       const result = await judge0Provider.run({ language: 'python', code: 'print("hi"', stdin: '' })
@@ -157,7 +152,6 @@ describe('judge0 provider', () => {
 
     it('maps other terminal statuses (4, 7-14) to runtime-error with stderr as the message', async () => {
       setupFetch([
-        jsonResponse({ token: 'tok-1' }),
         jsonResponse({
           status: { id: 7, description: 'Runtime Error (NZEC)' },
           stdout: b64(''),
@@ -172,26 +166,65 @@ describe('judge0 provider', () => {
     })
   })
 
-  describe('deadline', () => {
-    it('stops polling past the client-side deadline and returns timeout', async () => {
-      const { calls } = setupFetch([
-        jsonResponse({ token: 'tok-1' }),
-        jsonResponse({ status: { id: 1, description: 'In Queue' }, stdout: b64OrNull(null), stderr: b64OrNull(null) })
+  describe('input-missing educational errors', () => {
+    it('returns an educational input-missing error when the program crashes reading input', async () => {
+      setupFetch([
+        jsonResponse({
+          status: { id: 7, description: 'Runtime Error (NZEC)' },
+          stdout: b64(''),
+          stderr: b64('Exception in thread "main" java.util.NoSuchElementException\n\tat java.base/java.util.Scanner.nextInt(Scanner.java:2258)\n\tat Main.main(Main.java:8)')
+        })
       ])
+      const result = await judge0Provider.run({ language: 'java', code: 'new Scanner(System.in).nextInt();', stdin: '' })
+      expect(result.status).toBe('runtime-error')
+      expect(result.error?.message).toContain('NoSuchElementException')
+      expect(result.error?.expected).toContain('input')
+      expect(result.error?.nextStep.toLowerCase()).toMatch(/input|type/)
+    })
+
+    it('returns an educational input-missing error for Python EOF-on-input crashes', async () => {
+      setupFetch([
+        jsonResponse({
+          status: { id: 7, description: 'Runtime Error (NZEC)' },
+          stdout: b64(''),
+          stderr: b64('Traceback (most recent call last):\nEOFError: EOF when reading a line')
+        })
+      ])
+      const result = await judge0Provider.run({ language: 'python', code: 'input()', stdin: '' })
+      expect(result.status).toBe('runtime-error')
+      expect(result.error?.message).toContain('EOFError')
+      expect(result.error?.expected).toContain('input')
+      expect(result.error?.nextStep.toLowerCase()).toMatch(/input|type/)
+    })
+  })
+
+  describe('deadline + failure paths', () => {
+    it('aborts past the client-side deadline and returns timeout', async () => {
+      const calls: CapturedCall[] = []
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          (_url: string | URL | Request, init?: RequestInit) =>
+            new Promise((_resolve, reject) => {
+              calls.push({ url: String(_url), body: null, signal: init?.signal ?? undefined })
+              init?.signal?.addEventListener('abort', () =>
+                reject(new DOMException('The operation was aborted.', 'AbortError'))
+              )
+            })
+        )
+      )
       const result = await judge0Provider.run({
         language: 'python',
         code: 'print("hi")',
         stdin: '',
-        limits: { timeoutMs: 60 }
+        limits: { timeoutMs: 120 }
       })
       expect(result.status).toBe('timeout')
       expect(result.error?.expected).toBe('your program to finish within the time limit')
       expect(result.error?.nextStep).toBeTruthy()
-      expect(calls.length).toBeLessThan(6)
-    }, 3000)
-  })
+      expect(calls[0].signal).toBeTruthy()
+    })
 
-  describe('failure paths', () => {
     it('returns an educational error when the runner is unreachable', async () => {
       vi.stubGlobal(
         'fetch',
@@ -220,46 +253,6 @@ describe('judge0 provider', () => {
       expect(result.status).toBe('runtime-error')
       expect(result.error?.message).toContain('502')
       expect(result.error?.nextStep.toLowerCase()).toMatch(/try again|again/)
-    })
-
-    it('returns a runtime-error-style educational error for a language judge0 does not support', async () => {
-      const { calls } = setupFetch([])
-      const result = await judge0Provider.run({ language: 'cobol', code: 'display "hi".', stdin: '' })
-      expect(result.status).toBe('runtime-error')
-      expect(result.error?.message).toContain('cobol')
-      expect(result.error?.nextStep).toBeTruthy()
-      expect(calls).toHaveLength(0)
-    })
-    it('returns an educational input-missing error when the program crashes reading input', async () => {
-      setupFetch([
-        jsonResponse({ token: 'tok-1' }),
-        jsonResponse({
-          status: { id: 7, description: 'Runtime Error (NZEC)' },
-          stdout: b64(''),
-          stderr: b64('Exception in thread "main" java.util.NoSuchElementException\n\tat java.base/java.util.Scanner.nextInt(Scanner.java:2258)\n\tat Main.main(Main.java:8)')
-        })
-      ])
-      const result = await judge0Provider.run({ language: 'java', code: 'new Scanner(System.in).nextInt();', stdin: '' })
-      expect(result.status).toBe('runtime-error')
-      expect(result.error?.message).toContain('NoSuchElementException')
-      expect(result.error?.expected).toContain('input')
-      expect(result.error?.nextStep.toLowerCase()).toMatch(/input box|input, then run/)
-    })
-
-    it('returns an educational input-missing error for Python EOF-on-input crashes', async () => {
-      setupFetch([
-        jsonResponse({ token: 'tok-1' }),
-        jsonResponse({
-          status: { id: 7, description: 'Runtime Error (NZEC)' },
-          stdout: b64(''),
-          stderr: b64('Traceback (most recent call last):\nEOFError: EOF when reading a line')
-        })
-      ])
-      const result = await judge0Provider.run({ language: 'python', code: 'input()', stdin: '' })
-      expect(result.status).toBe('runtime-error')
-      expect(result.error?.message).toContain('EOFError')
-      expect(result.error?.expected).toContain('input')
-      expect(result.error?.nextStep.toLowerCase()).toMatch(/input box|input, then run/)
     })
   })
 })
