@@ -631,6 +631,7 @@ a.card:hover {
   min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
+  grid-auto-rows: minmax(0, 1fr);
 }
 @media (max-width: 860px) {
   .workbench-pane-tabs { display: flex; }
@@ -682,6 +683,14 @@ a.card:hover {
   min-height: 0;
   overflow: hidden;
   overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+}
+/* The CodeEditor renders its own .editor-host inside — give it a guaranteed
+   visible minimum and let its flex:1 resolve against this flex column. */
+.workbench-editor-host > .editor-host {
+  flex: 1;
+  min-height: 320px;
 }
 .workbench-terminal-host {
   flex: 1;
