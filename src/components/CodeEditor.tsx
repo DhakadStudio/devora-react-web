@@ -1,5 +1,6 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useTheme } from '../lib/theme'
+import { attachEditorZoom } from '../lib/editorZoom'
 
 const Monaco = lazy(async () => {
   const mod = await import('@monaco-editor/react')
@@ -74,7 +75,7 @@ const LIGHT_RULES: ThemeRule[] = [
 
 const DARK_THEME = {
   base: 'vs-dark' as const,
-  inherit: true,
+  inherit: false,
   rules: DARK_RULES,
   colors: {
     'editor.background': '#101114',
@@ -83,8 +84,11 @@ const DARK_THEME = {
     'editorLineNumber.activeForeground': '#9BA1A8',
     'editorCursor.foreground': '#2AD4F0',
     'editor.selectionBackground': 'rgba(8,145,178,0.30)',
+    'editor.selectionHighlightBackground': 'rgba(42,212,240,0.18)',
     'editor.inactiveSelectionBackground': 'rgba(8,145,178,0.15)',
-    'editor.lineHighlightBackground': 'rgba(42,212,240,0.09)',
+    'editor.wordHighlightBackground': 'rgba(42,212,240,0.10)',
+    'editor.wordHighlightStrongBackground': 'rgba(42,212,240,0.20)',
+    'editor.lineHighlightBackground': '#191D23',
     'editor.lineHighlightBorder': '#00000000',
     'editorIndentGuide.background1': '#1F2126',
     'editorIndentGuide.activeBackground1': '#2E3238',
@@ -97,6 +101,8 @@ const DARK_THEME = {
     'scrollbarSlider.background': 'rgba(155,161,168,0.25)',
     'scrollbarSlider.hoverBackground': 'rgba(155,161,168,0.40)',
     'scrollbarSlider.activeBackground': 'rgba(8,145,178,0.45)',
+    'editorBracketMatch.background': 'rgba(42,212,240,0.12)',
+    'editorBracketMatch.border': '#3A3F47',
     'editorBracketHighlight.foreground1': '#2AD4F0',
     'editorBracketHighlight.foreground2': '#FBBF24',
     'editorBracketHighlight.foreground3': '#5BE49B',
@@ -107,7 +113,7 @@ const DARK_THEME = {
 
 const LIGHT_THEME = {
   base: 'vs' as const,
-  inherit: true,
+  inherit: false,
   rules: LIGHT_RULES,
   colors: {
     'editor.background': '#FFFFFF',
@@ -116,8 +122,11 @@ const LIGHT_THEME = {
     'editorLineNumber.activeForeground': '#565B63',
     'editorCursor.foreground': '#0891B2',
     'editor.selectionBackground': 'rgba(8,145,178,0.22)',
+    'editor.selectionHighlightBackground': 'rgba(8,145,178,0.12)',
     'editor.inactiveSelectionBackground': 'rgba(8,145,178,0.10)',
-    'editor.lineHighlightBackground': 'rgba(8,145,178,0.05)',
+    'editor.wordHighlightBackground': 'rgba(8,145,178,0.08)',
+    'editor.wordHighlightStrongBackground': 'rgba(8,145,178,0.15)',
+    'editor.lineHighlightBackground': '#F0F4F5',
     'editor.lineHighlightBorder': '#00000000',
     'editorIndentGuide.background1': '#E3E3DF',
     'editorIndentGuide.activeBackground1': '#C7C9CE',
@@ -130,6 +139,8 @@ const LIGHT_THEME = {
     'scrollbarSlider.background': 'rgba(26,27,30,0.20)',
     'scrollbarSlider.hoverBackground': 'rgba(26,27,30,0.35)',
     'scrollbarSlider.activeBackground': 'rgba(8,145,178,0.40)',
+    'editorBracketMatch.background': 'rgba(8,145,178,0.10)',
+    'editorBracketMatch.border': '#C7C9CE',
     'editorBracketHighlight.foreground1': '#0E7490',
     'editorBracketHighlight.foreground2': '#92400E',
     'editorBracketHighlight.foreground3': '#166534',
@@ -162,8 +173,20 @@ interface Props {
 export function CodeEditor({ value, onChange, language = 'javascript', readOnly = false }: Props) {
   const { theme } = useTheme()
   const monacoLanguage = language === 'javascript' ? 'javascript' : language
+  const hostRef = useRef<HTMLDivElement>(null)
+  const fontSizeRef = useRef(14)
+  const [fontSize, setFontSizeState] = useState(14)
+  const setFontSize = useCallback((n: number) => {
+    fontSizeRef.current = n
+    setFontSizeState(n)
+  }, [])
+
+  useEffect(() => {
+    return attachEditorZoom(hostRef.current, () => fontSizeRef.current, setFontSize)
+  }, [setFontSize])
+
   return (
-    <div className="editor-host" role="group" aria-label="Code editor">
+    <div className="editor-host" role="group" aria-label="Code editor" ref={hostRef}>
       <Suspense
         fallback={
           <textarea
@@ -193,7 +216,7 @@ export function CodeEditor({ value, onChange, language = 'javascript', readOnly 
             readOnly,
             minimap: { enabled: false },
             fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-            fontSize: 14,
+            fontSize,
             fontLigatures: true,
             lineHeight: 1.7,
             padding: { top: 14, bottom: 14 },

@@ -304,6 +304,36 @@ a.card:hover {
   background: var(--accent-soft);
 }
 
+/* ---------- Stdin panel (playground) ---------- */
+.stdin-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.stdin-input {
+  min-height: 64px;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-13);
+  line-height: 1.6;
+  background: var(--code-bg);
+  color: var(--code-text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  resize: vertical;
+}
+.stdin-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+.stdin-input::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
 /* ---------- Window / editor chrome ---------- */
 .window {
   background: var(--surface);

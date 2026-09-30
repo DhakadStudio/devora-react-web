@@ -121,6 +121,24 @@ function mapTerminal(result: Judge0Result): ExecResult {
   }
 
   const message = stderr !== '' ? stderr : compileOutput !== '' ? compileOutput : description
+
+  const inputCrash =
+    /NoSuchElementException|No line found|EOFError|EOF when reading|InputMismatchException/i.test(
+      `${stderr} ${compileOutput}`
+    )
+  if (inputCrash) {
+    return {
+      status: 'runtime-error',
+      stdout,
+      stderr,
+      error: {
+        message,
+        expected: 'input for your program to read — Scanner (Java), input() (Python), cin (C++) and stdin in other languages read from the Input box',
+        nextStep: 'Type what your program should read into the Input box under the editor, then run it again.'
+      }
+    }
+  }
+
   return {
     status: 'runtime-error',
     stdout,

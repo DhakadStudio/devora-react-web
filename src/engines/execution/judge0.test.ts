@@ -230,5 +230,36 @@ describe('judge0 provider', () => {
       expect(result.error?.nextStep).toBeTruthy()
       expect(calls).toHaveLength(0)
     })
+    it('returns an educational input-missing error when the program crashes reading input', async () => {
+      setupFetch([
+        jsonResponse({ token: 'tok-1' }),
+        jsonResponse({
+          status: { id: 7, description: 'Runtime Error (NZEC)' },
+          stdout: b64(''),
+          stderr: b64('Exception in thread "main" java.util.NoSuchElementException\n\tat java.base/java.util.Scanner.nextInt(Scanner.java:2258)\n\tat Main.main(Main.java:8)')
+        })
+      ])
+      const result = await judge0Provider.run({ language: 'java', code: 'new Scanner(System.in).nextInt();', stdin: '' })
+      expect(result.status).toBe('runtime-error')
+      expect(result.error?.message).toContain('NoSuchElementException')
+      expect(result.error?.expected).toContain('input')
+      expect(result.error?.nextStep.toLowerCase()).toMatch(/input box|input, then run/)
+    })
+
+    it('returns an educational input-missing error for Python EOF-on-input crashes', async () => {
+      setupFetch([
+        jsonResponse({ token: 'tok-1' }),
+        jsonResponse({
+          status: { id: 7, description: 'Runtime Error (NZEC)' },
+          stdout: b64(''),
+          stderr: b64('Traceback (most recent call last):\nEOFError: EOF when reading a line')
+        })
+      ])
+      const result = await judge0Provider.run({ language: 'python', code: 'input()', stdin: '' })
+      expect(result.status).toBe('runtime-error')
+      expect(result.error?.message).toContain('EOFError')
+      expect(result.error?.expected).toContain('input')
+      expect(result.error?.nextStep.toLowerCase()).toMatch(/input box|input, then run/)
+    })
   })
 })

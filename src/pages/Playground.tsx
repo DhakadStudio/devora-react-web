@@ -92,6 +92,7 @@ function clearDraft(language: PlaygroundLanguage): void {
 export function Playground() {
   const [language, setLanguage] = useState<PlaygroundLanguage>('javascript')
   const [code, setCode] = useState(() => loadDraft('javascript'))
+  const [stdin, setStdin] = useState('')
   const [result, setResult] = useState<ExecResult | null>(null)
   const windowRef = useRef<HTMLElement | null>(null)
   const [running, setRunning] = useState(false)
@@ -146,7 +147,7 @@ export function Playground() {
     const seq = ++runSeqRef.current
     setRunning(true)
     try {
-      const r = await runCode({ language, code })
+      const r = await runCode({ language, code, stdin })
       if (runSeqRef.current === seq) setResult(r)
     } catch {
       if (runSeqRef.current === seq) {
@@ -261,6 +262,21 @@ export function Playground() {
             ref={outputRef}
             style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', minHeight: 320 }}
           >
+            <div className="stdin-panel">
+              <label htmlFor="pg-stdin" className="label">
+                Input (stdin) — what your program reads
+              </label>
+              <textarea
+                id="pg-stdin"
+                className="stdin-input mono"
+                value={stdin}
+                onChange={(e) => setStdin(e.target.value)}
+                placeholder={'One value per line, e.g.\n42\nDevora'}
+                rows={3}
+                spellCheck={false}
+                aria-label="Program input (stdin)"
+              />
+            </div>
             <div className="output-bar" role="status" aria-live="polite">
               {running && (
                 <span className="output-quiet">
