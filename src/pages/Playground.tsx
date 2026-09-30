@@ -7,20 +7,55 @@ import { Icon } from '../components/Icon'
 import { FullscreenButton } from '../components/FullscreenButton'
 import { runCode, type ExecResult } from '../engines/execution'
 
-type PlaygroundLanguage = 'javascript' | 'python'
+type PlaygroundLanguage =
+  | 'javascript'
+  | 'python'
+  | 'java'
+  | 'cpp'
+  | 'c'
+  | 'csharp'
+  | 'go'
+  | 'ruby'
+  | 'php'
 
 const LANGUAGES: { id: PlaygroundLanguage; label: string }[] = [
   { id: 'javascript', label: 'JavaScript' },
-  { id: 'python', label: 'Python' }
+  { id: 'python', label: 'Python' },
+  { id: 'java', label: 'Java' },
+  { id: 'cpp', label: 'C++' },
+  { id: 'c', label: 'C' },
+  { id: 'csharp', label: 'C#' },
+  { id: 'go', label: 'Go' },
+  { id: 'ruby', label: 'Ruby' },
+  { id: 'php', label: 'PHP' }
 ]
 
 const STARTER: Record<PlaygroundLanguage, string> = {
   javascript: 'console.log("Hello, Devora")\n',
-  python: 'print("Hello, Devora")\n'
+  python: 'print("Hello, Devora")\n',
+  java: 'class Main {\n  public static void main(String[] args) {\n    System.out.println("Hello, Devora");\n  }\n}\n',
+  cpp: '#include <iostream>\n\nint main() {\n  std::cout << "Hello, Devora" << std::endl;\n  return 0;\n}\n',
+  c: '#include <stdio.h>\n\nint main() {\n  printf("Hello, Devora\\n");\n  return 0;\n}\n',
+  csharp: 'class Hello {\n  static void Main() {\n    System.Console.WriteLine("Hello, Devora");\n  }\n}\n',
+  go: 'package main\n\nimport "fmt"\n\nfunc main() {\n  fmt.Println("Hello, Devora")\n}\n',
+  ruby: 'puts "Hello, Devora"\n',
+  php: '<?php\necho "Hello, Devora";\n'
+}
+
+const FILE_NAMES: Record<PlaygroundLanguage, string> = {
+  javascript: 'main.js',
+  python: 'main.py',
+  java: 'Main.java',
+  cpp: 'main.cpp',
+  c: 'main.c',
+  csharp: 'Hello.cs',
+  go: 'main.go',
+  ruby: 'main.rb',
+  php: 'index.php'
 }
 
 function fileNameFor(language: PlaygroundLanguage): string {
-  return language === 'python' ? 'main.py' : 'main.js'
+  return FILE_NAMES[language]
 }
 
 /** Per-language draft drafts — plain localStorage keys, NOT the progress
@@ -58,6 +93,7 @@ export function Playground() {
   const [language, setLanguage] = useState<PlaygroundLanguage>('javascript')
   const [code, setCode] = useState(() => loadDraft('javascript'))
   const [result, setResult] = useState<ExecResult | null>(null)
+  const windowRef = useRef<HTMLElement | null>(null)
   const [running, setRunning] = useState(false)
   // Sequence guard: switching language while a run is in flight makes that
   // run's result stale — it never lands in the new language's pane.
@@ -140,28 +176,26 @@ export function Playground() {
         sub="No lesson here. Just you, an editor, and the run button. Your draft saves itself per language as you type."
       />
 
-      <div className="row" style={{ marginBottom: 'var(--sp-4)', flexWrap: 'wrap', gap: 'var(--sp-3)' }}>
-        <label className="select-wrap">
-          <span className="label" style={{ marginRight: 'var(--sp-2)' }}>
-            Language
-          </span>
-          <select
-            className="select mono"
-            value={language}
-            onChange={(e) => pickLanguage(e.target.value)}
-            aria-label="Playground language"
+      <div
+        className="lang-strip"
+        role="group"
+        aria-label="Playground language"
+        style={{ marginBottom: 'var(--sp-4)' }}
+      >
+        {LANGUAGES.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            className="lang-tab"
+            aria-pressed={language === l.id}
+            onClick={() => pickLanguage(l.id)}
           >
-            {LANGUAGES.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-          <Icon name="chevronD" size={14} />
-        </label>
+            {l.label}
+          </button>
+        ))}
       </div>
 
-      <section className="window" aria-label="Playground editor" style={{ minHeight: '60dvh' }}>
+      <section ref={windowRef} className="window" aria-label="Playground editor" style={{ minHeight: '60dvh' }}>
         <div className="window-bar">
           <div className="window-dots" aria-hidden="true">
             <span />
@@ -210,7 +244,7 @@ export function Playground() {
             Reset
           </Button>
           <span style={{ flex: 1 }} />
-          <FullscreenButton />
+          <FullscreenButton targetRef={windowRef} />
         </div>
 
         <div className="workspace" style={{ alignItems: 'stretch' }}>

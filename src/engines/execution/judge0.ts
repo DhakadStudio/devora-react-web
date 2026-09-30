@@ -8,10 +8,19 @@ import type { ExecRequest, ExecResult, ExecutionProvider } from './types'
  */
 const JUDGE0_BASE_URL = 'https://ce.judge0.com'
 
-/** Judge0 language_id map — room to extend (e.g. c: 50, cpp: 54). Adding an
- *  entry makes the registry route that language here automatically.
- *  javascript never routes here (browser provider handles it). */
-const LANGUAGE_IDS: Record<string, number> = { python: 71 }
+/** Judge0 language_id map — every entry verified compile+run on ce.judge0.com
+ *  (2026-09-30). Adding an entry makes the registry route that language here
+ *  automatically. javascript never routes here (browser provider handles it). */
+const LANGUAGE_IDS: Record<string, number> = {
+  python: 71,
+  java: 62,
+  cpp: 105,
+  c: 103,
+  csharp: 51,
+  go: 60,
+  ruby: 72,
+  php: 68
+}
 
 const POLL_INTERVAL_MS = 250
 
@@ -57,7 +66,17 @@ function sleep(ms: number): Promise<void> {
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init)
-  if (!response.ok) throw new Error(`The code runner responded with HTTP ${response.status}.`)
+  if (!response.ok) {
+    if (response.status === 429) {
+      throw new Error(
+        'The free compiler is rate-limited right now — HTTP 429 (too many runs in a short time).'
+      )
+    }
+    if (response.status >= 500) {
+      throw new Error(`The code runner is having trouble — HTTP ${response.status}.`)
+    }
+    throw new Error(`The code runner responded with HTTP ${response.status}.`)
+  }
   return (await response.json()) as T
 }
 
@@ -124,7 +143,7 @@ async function run(req: ExecRequest): Promise<ExecResult> {
       error: {
         message: `The code runner does not support "${req.language}" yet.`,
         expected: 'a language the runner can execute',
-        nextStep: 'Pick one of the supported languages — python is available today.'
+        nextStep: 'Pick one of the supported languages — python, java, cpp, c, csharp, go, ruby and php are available.'
       }
     }
   }
@@ -161,17 +180,28 @@ async function run(req: ExecRequest): Promise<ExecResult> {
     }
   } catch (e) {
     const raw = messageOf(e)
-    const message = /failed to fetch|networkerror|load failed/i.test(raw)
+    const isNetwork = /failed to fetch|networkerror|load failed/i.test(raw)
+    const isRateLimit = /429/.test(raw)
+    const isServerError = /HTTP 5\d\d/.test(raw)
+    const message = isNetwork
       ? `Could not reach the code runner — ${raw}`
       : raw
+    const expected = isRateLimit
+      ? 'your program to run — the free compiler allows a limited number of runs per hour'
+      : 'the code runner to be reachable'
+    const nextStep = isRateLimit
+      ? 'Wait a minute and run it again — the limit resets shortly.'
+      : isServerError
+        ? 'The runner should recover on its own — try running the code again in a moment.'
+        : 'Check your internet connection and try running the code again in a moment.'
     return {
       status: 'runtime-error',
       stdout: '',
       stderr: '',
       error: {
         message,
-        expected: 'the code runner to be reachable',
-        nextStep: 'Check your internet connection and try running the code again in a moment.'
+        expected,
+        nextStep
       }
     }
   }

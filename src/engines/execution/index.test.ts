@@ -18,9 +18,16 @@ describe('execution engine', () => {
 
     it('routes python to the judge0 provider', () => {
       const provider = getProvider('python')
-      expect(provider).not.toBeNull()
       expect(provider?.id).toBe('judge0')
       expect(provider?.languages).toContain('python')
+    })
+
+    it('routes the compiled languages (java, cpp, c, csharp, go, ruby, php) to the judge0 provider', () => {
+      for (const lang of ['java', 'cpp', 'c', 'csharp', 'go', 'ruby', 'php']) {
+        const provider = getProvider(lang)
+        expect(provider?.id, `${lang} should route to judge0`).toBe('judge0')
+        expect(provider?.languages, `${lang} should be declared`).toContain(lang)
+      }
     })
 
     it('returns null for unknown languages', () => {
@@ -62,7 +69,7 @@ describe('execution engine', () => {
     it('routes python to the judge0 provider through the public API', async () => {
       const provider = getProvider('python')
       expect(provider?.id).toBe('judge0')
-      const result: ExecResult = await runCode({ language: 'ruby', code: 'puts "hi"' })
+      const result: ExecResult = await runCode({ language: 'cobol', code: 'display "hi".' })
       expect(result.status).toBe('no-provider')
       expect(result.error).toBeDefined()
     })

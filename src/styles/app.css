@@ -304,6 +304,44 @@ a.card:hover {
   background: var(--accent-soft);
 }
 
+/* ---------- Language strip (playground) ---------- */
+.lang-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.lang-tab {
+  min-height: 44px;
+  padding: 0 var(--sp-4);
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+.lang-tab:hover {
+  background: var(--elevated);
+  color: var(--text);
+  border-color: var(--accent);
+}
+.lang-tab[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+}
+.lang-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ---------- Window / editor chrome ---------- */
 .window {
   background: var(--surface);
@@ -312,6 +350,48 @@ a.card:hover {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+}
+
+/* ---------- Immersive fullscreen (the editor is the screen) ---------- */
+.window:fullscreen {
+  border: 0;
+  border-radius: 0;
+  background: var(--code-bg);
+  max-width: none;
+  width: 100vw;
+  height: 100vh;
+  padding: 0;
+}
+.window:fullscreen .editor-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--code-bg);
+}
+.window:fullscreen .window-bar {
+  background: var(--code-bg);
+  height: 48px;
+}
+.window:fullscreen .tabbar {
+  background: var(--code-bg);
+}
+.window:fullscreen .output-bar {
+  max-height: 40vh;
+  overflow: auto;
+  background: var(--code-bg);
+}
+.window:fullscreen .codeview {
+  font-size: 15px;
+}
+.window:-webkit-full-screen {
+  border: 0;
+  border-radius: 0;
+  background: var(--code-bg);
+  width: 100vw;
+  height: 100vh;
+}
+.window:-webkit-full-screen .editor-host {
+  flex: 1 1 auto;
   min-height: 0;
 }
 .window-bar {

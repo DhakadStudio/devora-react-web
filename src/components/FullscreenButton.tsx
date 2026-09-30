@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
 import { Icon } from './Icon'
 
 type FsDocument = Document & {
@@ -9,16 +9,22 @@ type FsElement = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> }
 
 /**
  * Full-screen toggle for work surfaces (lesson workspace, playground).
- * Uses the Fullscreen API where available (desktop, Android); on iOS Safari,
- * which blocks fullscreen on iPhone, it falls back to a chrome-hiding
+ * With a targetRef, fullscreens THE WORKSPACE ITSELF — an immersive coding
+ * mode where the editor + output fill the viewport (the thrill), not just the
+ * browser chrome. Without one it falls back to the document element. On iOS
+ * Safari, which blocks fullscreen on iPhone, it falls back to a chrome-hiding
  * "focus mode" class so the button still works on every device type.
  */
-export function FullscreenButton() {
+export function FullscreenButton({ targetRef }: { targetRef?: RefObject<HTMLElement | null> } = {}) {
   const [active, setActive] = useState(false)
 
   useEffect(() => {
     const doc = document as FsDocument
-    const sync = () => setActive(Boolean(document.fullscreenElement ?? doc.webkitFullscreenElement))
+    const sync = () => {
+      const current = document.fullscreenElement ?? doc.webkitFullscreenElement
+      setActive(Boolean(current))
+      if (!current) document.body.classList.remove('focus-mode')
+    }
     document.addEventListener('fullscreenchange', sync)
     document.addEventListener('webkitfullscreenchange', sync as EventListener)
     return () => {
@@ -29,7 +35,6 @@ export function FullscreenButton() {
 
   const toggle = async () => {
     const doc = document as FsDocument
-    const root = document.documentElement as FsElement
     const inFs = Boolean(document.fullscreenElement ?? doc.webkitFullscreenElement)
     if (inFs) {
       await (document.exitFullscreen?.() ?? doc.webkitExitFullscreen?.()).catch(() => {})
@@ -37,8 +42,9 @@ export function FullscreenButton() {
       setActive(false)
       return
     }
+    const target = targetRef?.current ?? (document.documentElement as FsElement)
     try {
-      await (root.requestFullscreen?.() ?? root.webkitRequestFullscreen?.())
+      await (target.requestFullscreen?.() ?? (target as FsElement).webkitRequestFullscreen?.())
       if (!document.fullscreenElement && !doc.webkitFullscreenElement) throw new Error('unsupported')
       setActive(true)
     } catch {
@@ -66,7 +72,7 @@ export function FullscreenButton() {
       onClick={handleClick}
       aria-pressed={active}
       aria-label={active ? 'Exit full screen' : 'Enter full screen'}
-      title={active ? 'Exit full screen' : 'Full screen'}
+      title={active ? 'Exit full screen (Esc)' : 'Full screen'}
     >
       <Icon name={active ? 'minimize' : 'maximize'} size={15} />
       <span className="fullscreen-btn-label">{active ? 'Exit' : 'Full screen'}</span>

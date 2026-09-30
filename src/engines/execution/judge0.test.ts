@@ -204,19 +204,29 @@ describe('judge0 provider', () => {
       expect(result.error?.nextStep).toBeTruthy()
     })
 
-    it('returns an educational error on an HTTP error response', async () => {
+    it('returns an educational rate-limit error on HTTP 429', async () => {
       setupFetch([httpErrorResponse(429)])
       const result = await judge0Provider.run({ language: 'python', code: 'print("hi")', stdin: '' })
       expect(result.status).toBe('runtime-error')
       expect(result.error?.message).toContain('429')
-      expect(result.error?.nextStep).toBeTruthy()
+      expect(result.error?.message.toLowerCase()).toMatch(/rate|limit|wait/)
+      expect(result.error?.expected).toBeTruthy()
+      expect(result.error?.nextStep.toLowerCase()).toMatch(/wait|again/)
+    })
+
+    it('returns an educational server-error on HTTP 5xx', async () => {
+      setupFetch([httpErrorResponse(502)])
+      const result = await judge0Provider.run({ language: 'python', code: 'print("hi")', stdin: '' })
+      expect(result.status).toBe('runtime-error')
+      expect(result.error?.message).toContain('502')
+      expect(result.error?.nextStep.toLowerCase()).toMatch(/try again|again/)
     })
 
     it('returns a runtime-error-style educational error for a language judge0 does not support', async () => {
       const { calls } = setupFetch([])
-      const result = await judge0Provider.run({ language: 'ruby', code: 'puts "hi"', stdin: '' })
+      const result = await judge0Provider.run({ language: 'cobol', code: 'display "hi".', stdin: '' })
       expect(result.status).toBe('runtime-error')
-      expect(result.error?.message).toContain('ruby')
+      expect(result.error?.message).toContain('cobol')
       expect(result.error?.nextStep).toBeTruthy()
       expect(calls).toHaveLength(0)
     })

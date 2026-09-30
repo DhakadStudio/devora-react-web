@@ -186,6 +186,7 @@ function LessonWorkspace({ lesson }: { lesson: Lesson }) {
   const [typedCode, setTypedCode] = useState<string | null>(null)
   const code = typedCode ?? fallbackCode
   const [runResult, setRunResult] = useState<ExerciseRunResult | null>(null)
+  const windowRef = useRef<HTMLElement | null>(null)
   const [running, setRunning] = useState(false)
   const [mcFailed, setMcFailed] = useState(false)
   const outputRef = useRef<HTMLDivElement | null>(null)
@@ -476,7 +477,7 @@ function LessonWorkspace({ lesson }: { lesson: Lesson }) {
           <div className="workspace-side">{stageList}</div>
 
           {/* --- right column: editor + run/output always in the same view --- */}
-          <section className="window" aria-label="Exercise workspace">
+          <section ref={windowRef} className="window" aria-label="Exercise workspace">
             {exercise ? (
               <>
                 <div className="window-bar">
@@ -547,7 +548,7 @@ function LessonWorkspace({ lesson }: { lesson: Lesson }) {
                         Reset
                       </Button>
                       <span style={{ flex: 1 }} />
-                      <FullscreenButton />
+                      <FullscreenButton targetRef={windowRef} />
                       <Button
                         variant="secondary"
                         size="sm"
