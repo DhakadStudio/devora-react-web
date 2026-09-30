@@ -339,12 +339,22 @@ a.card:hover {
   display: flex;
   flex-direction: column;
   padding: var(--sp-3) var(--sp-3) 0;
+  box-sizing: border-box;
+  height: 100dvh;
+  min-height: 480px;
+}
+/* On mobile the sidebar becomes a top bar — the workbench starts below it. */
+@media (max-width: 560px) {
+  .playground-page {
+    height: calc(100dvh - var(--topbar-h));
+    padding: var(--sp-2) var(--sp-2) 0;
+  }
 }
 .workbench {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - var(--sp-16) - 2px);
-  min-height: 480px;
+  flex: 1;
+  min-height: 0;
   background: var(--code-bg);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
@@ -710,6 +720,12 @@ a.card:hover {
   border-bottom: 1px solid var(--border);
   background: var(--elevated);
   flex-shrink: 0;
+}
+@media (max-width: 860px) {
+  /* On mobile the Code/Preview pane tabs row carries Reset/Run — the
+     auto-saved toolbar row is extra chrome, removed there (same pattern as
+     the other languages). */
+  .webplay-toolbar { display: none; }
 }
 .webplay-actions { display: flex; align-items: center; gap: var(--sp-2); }
 .webplay-pane-tabs {
