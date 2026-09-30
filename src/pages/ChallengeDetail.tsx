@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { findChallenge } from '../lib/curriculum'
-import { useProgress } from '../lib/progress'
+import { useProgress, type LocalProgressState } from '../engines/progress'
 import { runJavaScript, type RunResult } from '../lib/runner'
 import { FullscreenButton } from '../components/FullscreenButton'
 import { PageHeader } from '../components/PageHeader'
@@ -19,6 +19,11 @@ export function ChallengeDetail() {
   const ch = challengeId ? findChallenge(challengeId) : null
   const toast = useToast()
   const [progress, actions] = useProgress()
+
+  const isDone = (s: LocalProgressState, id: string) => {
+    const st = s.lessons[id]?.status
+    return st === 'passed' || st === 'completed'
+  }
   const [code, setCode] = useState(() => (ch ? (progress.code[ch.id] ?? ch.starter) : '// challenge starter\n'))
   const [result, setResult] = useState<RunResult | null>(null)
   const [running, setRunning] = useState(false)
@@ -28,7 +33,7 @@ export function ChallengeDetail() {
   const outputRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => setHydrated(true), [])
 
-  const completed = ch ? Boolean(progress.completed[ch.id]) : false
+  const completed = ch ? isDone(progress, ch.id) : false
 
   const onChange = useCallback(
     (v: string) => {

@@ -3,20 +3,25 @@ import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
 import { CHALLENGES } from '../lib/curriculum'
-import { useProgress } from '../lib/progress'
+import { useProgress, type LocalProgressState } from '../engines/progress'
 
 const DIFFICULTIES = ['All', 'Beginner', 'Intermediate'] as const
 const STATES = ['All', 'Not done', 'Done'] as const
 
 export function Challenges() {
   const [progress] = useProgress()
+
+  const isDone = (s: LocalProgressState, id: string) => {
+    const st = s.lessons[id]?.status
+    return st === 'passed' || st === 'completed'
+  }
   const [difficulty, setDifficulty] = useState<(typeof DIFFICULTIES)[number]>('All')
   const [state, setState] = useState<(typeof STATES)[number]>('All')
   const topics = useMemo(() => ['All', ...Array.from(new Set(CHALLENGES.map((c) => c.topic)))], [])
   const [topic, setTopic] = useState<(typeof topics)[number]>('All')
 
   const list = CHALLENGES.filter((c) => {
-    const completed = Boolean(progress.completed[c.id])
+    const completed = isDone(progress, c.id)
     if (difficulty !== 'All' && c.difficulty !== difficulty) return false
     if (topic !== 'All' && c.topic !== topic) return false
     if (state === 'Done' && !completed) return false
@@ -71,7 +76,7 @@ export function Challenges() {
       ) : (
         <div className="grid grid-2">
           {list.map((c) => {
-            const done = Boolean(progress.completed[c.id])
+            const done = isDone(progress, c.id)
             return (
               <Link key={c.id} className="card" to={`/challenges/${c.id}`}>
                 <div className="row" style={{ gap: 'var(--sp-2)' }}>

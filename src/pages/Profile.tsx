@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react'
 import { useToast } from '../components/Toast'
 import { useAuth, signOut } from '../lib/auth'
 import { useTheme } from '../lib/theme'
-import { useProgress, ALL_LESSONS_COUNT, ALL_CHALLENGES_COUNT } from '../lib/progress'
+import { useProgress } from '../engines/progress'
+import { CHALLENGES } from '../lib/curriculum'
+import { listPaths, listCourses, listModules, listLessons } from '../engines/curriculum'
 import { useSnippets } from '../lib/snippets'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
@@ -16,8 +19,33 @@ export function Profile() {
   const [{ items }, snippetOps] = useSnippets()
   const shared = items.filter((s) => s.shared)
   const name = user?.email?.split('@')[0] ?? 'Guest learner'
-  const doneCount = Object.keys(progress.completed).length
+  const doneCount = Object.values(progress.lessons).filter(
+    (s) => s.status === 'passed' || s.status === 'completed'
+  ).length
   const reflections = Object.keys(progress.reflections).length
+  const challengesDone = Object.keys(progress.lessons).filter((id) => id.startsWith('ch-')).length
+  const [lessonCount, setLessonCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    listPaths().then(async (paths) => {
+      let count = 0
+      for (const p of paths) {
+        const courses = await listCourses(p.id)
+        for (const c of courses) {
+          const modules = await listModules(c.id)
+          for (const m of modules) {
+            const lessons = await listLessons(m.id)
+            count += lessons.length
+          }
+        }
+      }
+      if (!cancelled) setLessonCount(count)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function handleSignOut() {
     try {
@@ -85,7 +113,7 @@ export function Profile() {
           <p className="label">lessons</p>
           <p className="mono" style={{ fontSize: 'var(--fs-28)', fontWeight: 600 }}>
             {doneCount}
-            <span className="muted fs-12"> / {ALL_LESSONS_COUNT}</span>
+            <span className="muted fs-12"> / {lessonCount ?? '…'}</span>
           </p>
         </div>
         <div className="panel panel-pad">
@@ -95,8 +123,8 @@ export function Profile() {
         <div className="panel panel-pad">
           <p className="label">challenges</p>
           <p className="mono" style={{ fontSize: 'var(--fs-28)', fontWeight: 600 }}>
-            {Object.keys(progress.completed).filter((id) => id.startsWith('ch-')).length}
-            <span className="muted fs-12"> / {ALL_CHALLENGES_COUNT}</span>
+            {challengesDone}
+            <span className="muted fs-12"> / {CHALLENGES.length}</span>
           </p>
         </div>
       </section>

@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { CodeBlock } from '../components/JourneyChecklist'
 import { ThemeToggle } from '../components/ThemeToggle'
-import { PATHS } from '../lib/curriculum'
-import { runJavaScript } from '../lib/runner'
+import { listPaths, listCourses, listModules, listLessons, type PathSummary } from '../engines/curriculum'
+import { runCode } from '../engines/execution'
 import { Button } from '../components/Button'
 
 const DEMO_CODE = `let greeting = "Hello, Devora"\nconsole.log(greeting)`
@@ -12,11 +12,12 @@ const DEMO_CODE = `let greeting = "Hello, Devora"\nconsole.log(greeting)`
 export function Landing() {
   const [ran, setRan] = useState(false)
   const [output, setOutput] = useState<string | null>(null)
+  const [demoPaths, setDemoPaths] = useState<{ path: PathSummary; lessonTitles: string[] }[]>([])
 
   async function runDemo() {
     setRan(true)
-    const r = await runJavaScript(DEMO_CODE)
-    setOutput(r.logs.map((l) => l.text).join('\n') || (r.error ? r.error.message : '—'))
+    const r = await runCode({ language: 'javascript', code: DEMO_CODE })
+    setOutput(r.stdout || (r.error ? r.error.message : '—'))
   }
 
   useEffect(() => {
@@ -27,6 +28,24 @@ export function Landing() {
       localStorage.setItem('devora:visited', '1')
     } catch {
       /* storage unavailable — they'll see the landing page again; harmless */
+    }
+    let cancelled = false
+    listPaths().then(async (paths) => {
+      const cards: { path: PathSummary; lessonTitles: string[] }[] = []
+      for (const p of paths.slice(0, 2)) {
+        const courses = await listCourses(p.id)
+        const course = courses[0]
+        if (!course) continue
+        const modules = await listModules(course.id)
+        const moduleRow = modules[0]
+        if (!moduleRow) continue
+        const lessons = await listLessons(moduleRow.id)
+        cards.push({ path: p, lessonTitles: lessons.slice(0, 3).map((l) => l.title) })
+      }
+      if (!cancelled) setDemoPaths(cards)
+    })
+    return () => {
+      cancelled = true
     }
   }, [])
 
@@ -191,7 +210,7 @@ export function Landing() {
               Paths look like this inside the app
             </h2>
             <div className="grid grid-2">
-              {PATHS.slice(0, 2).map((p) => (
+              {demoPaths.map(({ path: p, lessonTitles }) => (
                 <div key={p.id} className="panel panel-pad">
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <span className="badge">{p.level}</span>
@@ -199,14 +218,13 @@ export function Landing() {
                   </div>
                   <h3 style={{ fontSize: 'var(--fs-16)', fontWeight: 600, marginTop: 'var(--sp-3)' }}>{p.title}</h3>
                   <ol className="journey" style={{ marginTop: 'var(--sp-4)' }}>
-                    {p.lessons.slice(0, 3).map((l) => (
-                      <li key={l.id} className="journey-item" data-state="todo">
+                    {lessonTitles.map((title, i) => (
+                      <li key={i} className="journey-item" data-state="todo">
                         <span className="journey-node">
                           <Icon name="chevronR" size={14} />
                         </span>
                         <span className="journey-title fs-14" style={{ fontWeight: 400, fontSize: 'var(--fs-14)' }}>
-                          {l.title}
-                          <span className="journey-meta">{l.minutes} min</span>
+                          {title}
                         </span>
                       </li>
                     ))}
