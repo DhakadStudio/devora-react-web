@@ -9,7 +9,8 @@ import { PageSkeleton } from '../components/Loading'
 import { useToast } from '../components/Toast'
 
 export function ProjectPage() {
-  const { projectId } = useParams()
+  const params = useParams()
+  const projectId = params['*'] ?? params.projectId
   const [project, setProject] = useState<GuidedProject | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [retry, setRetry] = useState(0)
