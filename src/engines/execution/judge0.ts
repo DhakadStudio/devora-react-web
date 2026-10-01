@@ -42,14 +42,6 @@ interface Judge0Result {
   compile_output?: string | null
 }
 
-/** Decodes base64 payloads. Trim nothing here — normalization is the
- *  learning engine's job. */
-function decodeBase64(encoded: string | null | undefined): string {
-  if (!encoded) return ''
-  const bytes = Uint8Array.from(atob(encoded), (ch) => ch.charCodeAt(0))
-  return new TextDecoder('utf-8', { fatal: false }).decode(bytes)
-}
-
 function messageOf(e: unknown): string {
   if (e instanceof Error) return e.message
   return String(e)
@@ -72,11 +64,11 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 function timeoutResult(result: Judge0Result): ExecResult {
-  const stderr = decodeBase64(result.stderr)
+  const stderr = result.stderr ?? ''
   const description = result.status?.description ?? ''
   return {
     status: 'timeout',
-    stdout: decodeBase64(result.stdout),
+    stdout: result.stdout ?? '',
     stderr,
     error: {
       message: stderr !== '' ? stderr : description !== '' ? description : 'The program did not finish within the time limit.',
@@ -88,9 +80,11 @@ function timeoutResult(result: Judge0Result): ExecResult {
 
 function mapTerminal(result: Judge0Result): ExecResult {
   const statusId = result.status?.id ?? 0
-  const stdout = decodeBase64(result.stdout)
-  const stderr = decodeBase64(result.stderr)
-  const compileOutput = decodeBase64(result.compile_output)
+  // wait=true + base64_encoded=false: the response fields are PLAIN TEXT —
+  // no decoding.
+  const stdout = result.stdout ?? ''
+  const stderr = result.stderr ?? ''
+  const compileOutput = result.compile_output ?? ''
   const description = result.status?.description ?? ''
 
   if (statusId === 3) return { status: 'ok', stdout, stderr }

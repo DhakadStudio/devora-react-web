@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { judge0Provider } from './judge0'
 
-function b64(text: string): string {
-  return btoa(text)
-}
-
 function jsonResponse(payload: Record<string, unknown>) {
   return {
     ok: true,
@@ -37,7 +33,7 @@ function setupFetch(responses: unknown[]) {
       signal: init?.signal ?? undefined
     })
     const next = responsesCopy.shift()
-    if (!next) return Promise.resolve(jsonResponse({ status: { id: 3 }, stdout: b64(''), stderr: b64('') }))
+    if (!next) return Promise.resolve(jsonResponse({ status: { id: 3 }, stdout: '', stderr: '' }))
     return Promise.resolve(next as Response)
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -58,8 +54,8 @@ describe('judge0 provider', () => {
       const { calls } = setupFetch([
         jsonResponse({
           status: { id: 3, description: 'Accepted' },
-          stdout: b64('hi\n'),
-          stderr: b64('')
+          stdout: 'hi\n',
+          stderr: ''
         })
       ])
       const result = await judge0Provider.run({ language: 'python', code: 'print("hi")', stdin: 'Devora\n' })
@@ -75,7 +71,7 @@ describe('judge0 provider', () => {
     })
 
     it('sends an absent stdin as an empty string', async () => {
-      const { calls } = setupFetch([jsonResponse({ status: { id: 3 }, stdout: b64(''), stderr: b64('') })])
+      const { calls } = setupFetch([jsonResponse({ status: { id: 3 }, stdout: '', stderr: '' })])
       await judge0Provider.run({ language: 'python', code: 'print("x")' })
       expect(parseBody(calls[0].body!).stdin).toBe('')
     })
@@ -83,7 +79,7 @@ describe('judge0 provider', () => {
 
   describe('language routing (all ids verified compile+run on ce.judge0.com 2026-09-30)', () => {
     it('maps every supported language to its verified judge0 id', async () => {
-      const { calls } = setupFetch([jsonResponse({ status: { id: 3 }, stdout: b64(''), stderr: b64('') })])
+      const { calls } = setupFetch([jsonResponse({ status: { id: 3 }, stdout: '', stderr: '' })])
       const expected: Record<string, number> = {
         javascript: 102,
         typescript: 94,
@@ -124,8 +120,8 @@ describe('judge0 provider', () => {
       setupFetch([
         jsonResponse({
           status: { id: 5, description: 'Time Limit Exceeded' },
-          stdout: b64(''),
-          stderr: b64('')
+          stdout: '',
+          stderr: ''
         })
       ])
       const result = await judge0Provider.run({ language: 'python', code: 'while True: pass', stdin: '' })
@@ -138,9 +134,9 @@ describe('judge0 provider', () => {
       setupFetch([
         jsonResponse({
           status: { id: 6, description: 'Compilation Error' },
-          stdout: b64(''),
-          stderr: b64(''),
-          compile_output: b64("SyntaxError: invalid syntax")
+          stdout: '',
+          stderr: '',
+          compile_output: 'SyntaxError: invalid syntax'
         })
       ])
       const result = await judge0Provider.run({ language: 'python', code: 'print("hi"', stdin: '' })
@@ -154,8 +150,8 @@ describe('judge0 provider', () => {
       setupFetch([
         jsonResponse({
           status: { id: 7, description: 'Runtime Error (NZEC)' },
-          stdout: b64(''),
-          stderr: b64('ZeroDivisionError: division by zero')
+          stdout: '',
+          stderr: 'ZeroDivisionError: division by zero'
         })
       ])
       const result = await judge0Provider.run({ language: 'python', code: '1/0', stdin: '' })
@@ -171,8 +167,8 @@ describe('judge0 provider', () => {
       setupFetch([
         jsonResponse({
           status: { id: 7, description: 'Runtime Error (NZEC)' },
-          stdout: b64(''),
-          stderr: b64('Exception in thread "main" java.util.NoSuchElementException\n\tat java.base/java.util.Scanner.nextInt(Scanner.java:2258)\n\tat Main.main(Main.java:8)')
+          stdout: '',
+          stderr: 'Exception in thread "main" java.util.NoSuchElementException\n\tat java.base/java.util.Scanner.nextInt(Scanner.java:2258)\n\tat Main.main(Main.java:8)'
         })
       ])
       const result = await judge0Provider.run({ language: 'java', code: 'new Scanner(System.in).nextInt();', stdin: '' })
@@ -186,8 +182,8 @@ describe('judge0 provider', () => {
       setupFetch([
         jsonResponse({
           status: { id: 7, description: 'Runtime Error (NZEC)' },
-          stdout: b64(''),
-          stderr: b64('Traceback (most recent call last):\nEOFError: EOF when reading a line')
+          stdout: '',
+          stderr: 'Traceback (most recent call last):\nEOFError: EOF when reading a line'
         })
       ])
       const result = await judge0Provider.run({ language: 'python', code: 'input()', stdin: '' })

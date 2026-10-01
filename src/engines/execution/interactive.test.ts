@@ -2,10 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../lib/supabase', () => ({ getSupabase: vi.fn() }))
 
-function b64(text: string): string {
-  return btoa(text)
-}
-
 function jsonResponse(payload: Record<string, unknown>) {
   return {
     ok: true,
@@ -26,7 +22,7 @@ const fetchMock = vi.fn((url: string | URL | Request, init?: RequestInit) => {
   calls.push({ url: String(url), body: typeof init?.body === 'string' ? init.body : null })
   const next = fetchQueue.shift()
   if (!next) {
-    return Promise.resolve(jsonResponse({ status: { id: 3, description: 'Accepted' }, stdout: b64(''), stderr: b64('') }))
+    return Promise.resolve(jsonResponse({ status: { id: 3, description: 'Accepted' }, stdout: '', stderr: '' }))
   }
   return Promise.resolve(next)
 })
@@ -61,8 +57,8 @@ describe('interactive runner — the dynamic input loop', () => {
   it('first run: no stdin, program blocks on input → awaitingInput, prompt stays open, scary trace suppressed', async () => {
     queueSubmitResult({
       status: { id: 7, description: 'Runtime Error (NZEC)' },
-      stdout: b64(''),
-      stderr: b64('Traceback (most recent call last):\nEOFError: EOF when reading a line')
+      stdout: '',
+      stderr: 'Traceback (most recent call last):\nEOFError: EOF when reading a line'
     })
     const runner = createInteractiveRunner({ language: 'python', getCode: () => LESSON_CODE })
     await runner.run()
@@ -76,16 +72,16 @@ describe('interactive runner — the dynamic input loop', () => {
   it('submitLine while blocked: re-runs with the collected stdin and shows only the NEW output', async () => {
     queueSubmitResult({
       status: { id: 7, description: 'Runtime Error (NZEC)' },
-      stdout: b64(''),
-      stderr: b64('EOFError: EOF when reading a line')
+      stdout: '',
+      stderr: 'EOFError: EOF when reading a line'
     })
     const runner = createInteractiveRunner({ language: 'python', getCode: () => LESSON_CODE })
     await runner.run()
 
     queueSubmitResult({
       status: { id: 3, description: 'Accepted' },
-      stdout: b64('Hello, Devora\n'),
-      stderr: b64('')
+      stdout: 'Hello, Devora\n',
+      stderr: ''
     })
     runner.submitLine('Devora')
     await vi.waitFor(() => expect(runner.isAwaitingInput()).toBe(false))
@@ -98,8 +94,8 @@ describe('interactive runner — the dynamic input loop', () => {
   it('collected input accumulates across multiple submitted lines', async () => {
     queueSubmitResult({
       status: { id: 7, description: 'Runtime Error (NZEC)' },
-      stdout: b64(''),
-      stderr: b64('EOFError')
+      stdout: '',
+      stderr: 'EOFError'
     })
     const runner = createInteractiveRunner({
       language: 'python',
@@ -109,16 +105,16 @@ describe('interactive runner — the dynamic input loop', () => {
 
     queueSubmitResult({
       status: { id: 7, description: 'Runtime Error (NZEC)' },
-      stdout: b64(''),
-      stderr: b64('EOFError')
+      stdout: '',
+      stderr: 'EOFError'
     })
     runner.submitLine('5')
     await vi.waitFor(() => expect(runner.isAwaitingInput()).toBe(true))
 
     queueSubmitResult({
       status: { id: 3, description: 'Accepted' },
-      stdout: b64('5 6\n'),
-      stderr: b64('')
+      stdout: '5 6\n',
+      stderr: ''
     })
     runner.submitLine('6')
     await vi.waitFor(() => expect(runner.isAwaitingInput()).toBe(false))
@@ -129,16 +125,16 @@ describe('interactive runner — the dynamic input loop', () => {
   it('stdout diff: re-run after input does not repeat output already on screen', async () => {
     queueSubmitResult({
       status: { id: 7, description: 'Runtime Error (NZEC)' },
-      stdout: b64('Enter your name: '),
-      stderr: b64('EOFError: EOF when reading a line')
+      stdout: 'Enter your name: ',
+      stderr: 'EOFError: EOF when reading a line'
     })
     const runner = createInteractiveRunner({ language: 'python', getCode: () => LESSON_CODE })
     await runner.run()
 
     queueSubmitResult({
       status: { id: 3, description: 'Accepted' },
-      stdout: b64('Enter your name: Devora\n'),
-      stderr: b64('')
+      stdout: 'Enter your name: Devora\n',
+      stderr: ''
     })
     runner.submitLine('Devora')
     await vi.waitFor(() => expect(runner.isAwaitingInput()).toBe(false))
@@ -150,8 +146,8 @@ describe('interactive runner — the dynamic input loop', () => {
   it('pendingPrompt: an unterminated stdout tail becomes the live prompt, not a finished line', async () => {
     queueSubmitResult({
       status: { id: 7, description: 'Runtime Error (NZEC)' },
-      stdout: b64('Enter your name: '),
-      stderr: b64('EOFError: EOF when reading a line')
+      stdout: 'Enter your name: ',
+      stderr: 'EOFError: EOF when reading a line'
     })
     const runner = createInteractiveRunner({ language: 'python', getCode: () => LESSON_CODE })
     await runner.run()
@@ -161,8 +157,8 @@ describe('interactive runner — the dynamic input loop', () => {
   it('reset clears everything', async () => {
     queueSubmitResult({
       status: { id: 7, description: 'Runtime Error (NZEC)' },
-      stdout: b64('Enter your name: '),
-      stderr: b64('EOFError')
+      stdout: 'Enter your name: ',
+      stderr: 'EOFError'
     })
     const runner = createInteractiveRunner({ language: 'python', getCode: () => LESSON_CODE })
     await runner.run()
@@ -175,8 +171,8 @@ describe('interactive runner — the dynamic input loop', () => {
   it('a non-input crash shows the error normally (not suppressed)', async () => {
     queueSubmitResult({
       status: { id: 7, description: 'Runtime Error (NZEC)' },
-      stdout: b64(''),
-      stderr: b64('ZeroDivisionError: division by zero')
+      stdout: '',
+      stderr: 'ZeroDivisionError: division by zero'
     })
     const runner = createInteractiveRunner({ language: 'python', getCode: () => '1/0' })
     await runner.run()
