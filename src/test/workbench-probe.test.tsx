@@ -14,18 +14,20 @@ describe('Workbench render probe — is the code visible?', () => {
     const javaItem = getByRole('menuitem', { name: 'Java' })
     fireEvent.click(javaItem)
 
-    // The editor pane should now show Java's sample code.
+    // The editor pane should now show Java's sample code — the CODE ITSELF,
+    // not an empty editor.
     await waitFor(() => {
       const editorArea = container.querySelector('.workbench-editor-host')
       expect(editorArea).toBeTruthy()
       expect(editorArea!.getAttribute('aria-hidden')).toBeNull()
     })
     const host = container.querySelector('.workbench-editor-host') as HTMLElement
-    // The host must have real height potential (not display:none / collapsed).
     expect(host.clientHeight).toBeGreaterThanOrEqual(0)
     expect(getComputedStyle(host).display).not.toBe('none')
-    const code = host.querySelector('textarea, .monaco-editor')
-    expect(code).toBeTruthy()
+    const code = host.querySelector('textarea') as HTMLTextAreaElement | null
+    expect(code, 'the editor must render a code element').toBeTruthy()
+    expect(code!.value).toContain('public class Main')
+    expect(code!.value.length).toBeGreaterThan(20)
   })
 
   it('the editor pane is NOT hidden behind the pane tabs on the code pane', () => {
