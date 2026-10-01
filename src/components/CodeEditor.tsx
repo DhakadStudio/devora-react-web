@@ -186,6 +186,9 @@ interface Props {
   onChange: (v: string) => void
   language?: string
   readOnly?: boolean
+  /** Unique per editor instance — each instance gets its OWN Monaco model
+   *  URI, so two editors never share/collide on the same model. */
+  editorId?: string
   autocomplete?: boolean
   fontSize?: number
   onFontSizeChange?: (n: number) => void
@@ -197,6 +200,7 @@ export function CodeEditor({
   onChange,
   language = 'javascript',
   readOnly = false,
+  editorId = 'editor',
   autocomplete = false,
   fontSize: fontSizeProp,
   onFontSizeChange,
@@ -241,7 +245,7 @@ export function CodeEditor({
           height="100%"
           language={monacoLanguage}
           defaultLanguage={monacoLanguage}
-          path={`file.${language === 'javascript' ? 'js' : language}`}
+          path={`devora-${editorId}/file.${language === 'javascript' ? 'js' : language}`}
           value={value}
           onChange={(v) => onChange(v ?? '')}
           beforeMount={(monaco) => {
@@ -292,8 +296,23 @@ export function CodeEditor({
             accessibilitySupport: 'on'
           }}
           loading={
-            <div className="loading-wrap">
-              <span className="spinner" aria-label="Editor loading" />
+            <div className="loading-wrap" style={{ position: 'relative', width: '100%', height: '100%' }}>
+              <textarea
+                className="codeview"
+                style={{ border: 0, resize: 'none', width: '100%', height: '100%', outline: 'none' }}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                readOnly={readOnly}
+                aria-label="Code editor (plain text view while the editor loads)"
+                spellCheck={false}
+              />
+              <div
+                className="loading-wrap"
+                style={{ position: 'absolute', top: 8, right: 12 }}
+                aria-hidden="true"
+              >
+                <span className="spinner" />
+              </div>
             </div>
           }
         />

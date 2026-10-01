@@ -86,20 +86,37 @@ export function WebPlayground({
   onFontSizeChange,
   autocomplete,
   readOnly,
-  bindApi
+  bindApi,
+  codes: codesProp,
+  onCodesChange,
+  activeFile: activeFileProp,
+  onActiveFileChange
 }: {
   fontSize: number
   onFontSizeChange?: (n: number) => void
   autocomplete?: boolean
   readOnly?: boolean
   bindApi?: (api: { run: () => void; reset: () => void }) => void
+  /** Controlled state (owned by the Workbench so the code SURVIVES the
+   *  component unmounting when a compiler language is selected — the same
+   *  way the original Vue implementation kept code in its own ref). */
+  codes?: Record<FileId, string>
+  onCodesChange?:
+    | React.Dispatch<React.SetStateAction<Record<FileId, string>>>
+    | ((update: (prev: Record<FileId, string>) => Record<FileId, string>) => void)
+  activeFile?: FileId
+  onActiveFileChange?: (id: FileId) => void
 }) {
-  const [codes, setCodes] = useState<Record<FileId, string>>(() => ({
+  const [codesState, setCodesState] = useState<Record<FileId, string>>(() => ({
     html: loadDraft('html'),
     css: loadDraft('css'),
     js: loadDraft('js')
   }))
-  const [activeFile, setActiveFile] = useState<FileId>('html')
+  const codes = codesProp ?? codesState
+  const setCodes = onCodesChange ?? setCodesState
+  const [activeFileState, setActiveFileState] = useState<FileId>('html')
+  const activeFile = activeFileProp ?? activeFileState
+  const setActiveFile = onActiveFileChange ?? setActiveFileState
   const [mobilePane, setMobilePane] = useState<'code' | 'preview'>('code')
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const editorHostRef = useRef<HTMLDivElement>(null)
@@ -143,7 +160,7 @@ ${current.html}
         return next
       })
     },
-    [activeFile, runPreview]
+    [activeFile, runPreview, setCodes]
   )
 
   useEffect(
@@ -231,6 +248,7 @@ ${current.html}
             <CodeEditor
               value={codes[activeFile]}
               onChange={onCodeChange}
+              editorId={`wp-${activeFile}`}
               language={active.lang}
               readOnly={readOnly}
               autocomplete={autocomplete}

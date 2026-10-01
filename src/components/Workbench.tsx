@@ -155,6 +155,17 @@ export function Workbench() {
     webplayApiRef.current = api
   }, [])
 
+  // The web playground's code is owned HERE (not inside WebPlayground) so it
+  // SURVIVES the component unmounting when a compiler language is selected —
+  // the same way the original Vue implementation kept code in its own ref.
+  // The initial load mirrors the component's own draft loading.
+  const [webCodes, setWebCodes] = useState<Record<'html' | 'css' | 'js', string>>(() => ({
+    html: loadDraft('web-html'),
+    css: loadDraft('web-css'),
+    js: loadDraft('web-js')
+  }))
+  const [webActiveFile, setWebActiveFile] = useState<'html' | 'css' | 'js'>('html')
+
   const run = useCallback(() => {
     setStarted(true)
     setMobilePane('output') // Run always lands on the output pane (mobile)
@@ -358,6 +369,10 @@ export function Workbench() {
             autocomplete={autocomplete}
             readOnly={readOnly}
             bindApi={bindWebplayApi}
+            codes={webCodes}
+            onCodesChange={setWebCodes}
+            activeFile={webActiveFile}
+            onActiveFileChange={setWebActiveFile}
           />
         </div>
       ) : (
@@ -401,6 +416,7 @@ export function Workbench() {
                 <CodeEditor
                   value={editorValue}
                   onChange={onCodeChange}
+                  editorId={`wb-${selectedId}`}
                   language={selectedLang?.monaco}
                   readOnly={readOnly}
                   autocomplete={autocomplete}

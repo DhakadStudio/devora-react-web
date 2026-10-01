@@ -838,6 +838,15 @@ a.card:hover {
   min-height: 0;
   overflow: hidden;
   overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+}
+/* Monaco's height:100% resolves against a DEFINITE parent height only — a
+   plain block parent (height auto) collapses the editor to 0px. Same
+   guarantee as the workbench's editor host. */
+.webplay-editor-host > .editor-host {
+  flex: 1;
+  min-height: 320px;
 }
 .webplay-preview-host {
   flex: 1;
