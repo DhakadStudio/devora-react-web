@@ -85,12 +85,14 @@ export function WebPlayground({
   fontSize,
   onFontSizeChange,
   autocomplete,
-  readOnly
+  readOnly,
+  bindApi
 }: {
   fontSize: number
   onFontSizeChange?: (n: number) => void
   autocomplete?: boolean
   readOnly?: boolean
+  bindApi?: (api: { run: () => void; reset: () => void }) => void
 }) {
   const [codes, setCodes] = useState<Record<FileId, string>>(() => ({
     html: loadDraft('html'),
@@ -153,12 +155,12 @@ ${current.html}
 
   const active = FILES.find((f) => f.id === activeFile)!
 
-  function runAndShowPreview() {
+  const runAndShowPreview = useCallback(() => {
     runPreview(codes)
     setMobilePane('preview')
-  }
+  }, [runPreview, codes])
 
-  function resetActive() {
+  const resetActive = useCallback(() => {
     setCodes((prev) => {
       const next = { ...prev, [activeFile]: active.sample }
       for (const f of FILES) saveDraft(f.id, next[f.id])
@@ -166,30 +168,16 @@ ${current.html}
       return next
     })
     clearDrafts()
-  }
+  }, [active.sample, runPreview])
+
+  useEffect(() => {
+    bindApi?.({ run: () => runAndShowPreview(), reset: () => resetActive() })
+  }, [bindApi, runAndShowPreview, resetActive])
 
   return (
     <div className="webplay">
-      {/* Desktop toolbar row: hint + Reset/Run (hidden on mobile — the same
-          controls live on the Code/Preview row below). */}
-      <div className="webplay-toolbar">
-        <span className="term-prompt-inline">Auto-saved in this browser</span>
-        <div className="webplay-actions">
-          <button type="button" className="btn btn-ghost btn-sm" onClick={resetActive}>
-            Reset
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            data-sd-run-trigger
-            onClick={runAndShowPreview}
-          >
-            Run
-          </button>
-        </div>
-      </div>
-
-      {/* Code/Preview row (mobile only): pane buttons + Reset/Run beside them. */}
+      {/* Code/Preview row: the pane buttons with Reset AND Run beside them —
+          the same single row the other languages use, on every screen size. */}
       <div className="webplay-pane-tabs" role="tablist" aria-label="Playground panes">
         <button
           type="button"

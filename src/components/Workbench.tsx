@@ -150,9 +150,18 @@ export function Workbench() {
     [isWebPlayground, selectedId]
   )
 
+  const webplayApiRef = useRef<{ run: () => void; reset: () => void } | null>(null)
+  const bindWebplayApi = useCallback((api: { run: () => void; reset: () => void }) => {
+    webplayApiRef.current = api
+  }, [])
+
   const run = useCallback(() => {
     setStarted(true)
     setMobilePane('output') // Run always lands on the output pane (mobile)
+    if (isWebPlayground) {
+      webplayApiRef.current?.run()
+      return
+    }
     const runner = runnerRef.current
     if (!runner) return
     setRunning(true)
@@ -160,11 +169,15 @@ export function Workbench() {
       setRunning(false)
       setAwaitingInput(runner.isAwaitingInput())
     })
-  }, [])
+  }, [isWebPlayground])
 
   const reset = useCallback(() => {
     setStarted(false)
     setAwaitingInput(false)
+    if (isWebPlayground) {
+      webplayApiRef.current?.reset()
+      return
+    }
     runnerRef.current?.reset()
     const lang = selectedLang
     if (!lang) return
@@ -235,17 +248,15 @@ export function Workbench() {
         </div>
 
         <div className="workbench-toolbar-right">
-          {!isWebPlayground && (
-            <div className="workbench-actions workbench-toolbar-run-actions">
-              <button type="button" className="btn btn-ghost btn-sm" onClick={reset}>
-                Reset
-              </button>
-              <button type="button" className="btn btn-primary btn-sm" disabled={running} onClick={run}>
-                <Icon name="play" size={12} filled />
-                {running ? 'Running…' : 'Run'}
-              </button>
-            </div>
-          )}
+          <div className="workbench-actions workbench-toolbar-run-actions">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={reset}>
+              Reset
+            </button>
+            <button type="button" className="btn btn-primary btn-sm" disabled={running} onClick={run}>
+              <Icon name="play" size={12} filled />
+              {running ? 'Running…' : 'Run'}
+            </button>
+          </div>
 
           <button
             type="button"
@@ -341,7 +352,13 @@ export function Workbench() {
 
       {isWebPlayground ? (
         <div className="workbench-webplay">
-          <WebPlayground fontSize={fontSize} onFontSizeChange={setFontSize} autocomplete={autocomplete} readOnly={readOnly} />
+          <WebPlayground
+            fontSize={fontSize}
+            onFontSizeChange={setFontSize}
+            autocomplete={autocomplete}
+            readOnly={readOnly}
+            bindApi={bindWebplayApi}
+          />
         </div>
       ) : (
         <>

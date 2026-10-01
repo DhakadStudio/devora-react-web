@@ -738,7 +738,7 @@ a.card:hover {
 }
 .webplay-actions { display: flex; align-items: center; gap: var(--sp-2); }
 .webplay-pane-tabs {
-  display: none;
+  display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px var(--sp-3);
@@ -786,8 +786,7 @@ a.card:hover {
   .webplay-pane-tabs { display: flex; }
   .webplay-body { grid-template-columns: 1fr; }
   .webplay-body .is-pane-hidden { display: none; }
-}
-.webplay-pane {
+}.webplay-pane {
   display: flex;
   flex-direction: column;
   min-height: 0;

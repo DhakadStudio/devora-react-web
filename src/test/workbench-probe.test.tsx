@@ -38,4 +38,25 @@ describe('Workbench render probe — is the code visible?', () => {
     expect(editorPane.classList.contains('is-pane-hidden')).toBe(false)
     expect(getComputedStyle(editorPane).display).not.toBe('none')
   })
+
+  it('ONE playground: the web view shows Run/Reset in the same toolbar as the compiler view', () => {
+    const { getByRole, getAllByRole, container } = render(<Workbench />)
+
+    // Web playground is the default selection — Run/Reset must exist (jsdom
+    // renders both rows; desktop CSS hides one — at least one must exist).
+    const toolbar = container.querySelector('.workbench-toolbar') as HTMLElement
+    expect(toolbar).toBeTruthy()
+    expect(getAllByRole('button', { name: /Run/i }).length).toBeGreaterThan(0)
+    expect(getAllByRole('button', { name: 'Reset' }).length).toBeGreaterThan(0)
+
+    // No "Auto-saved" line anywhere.
+    expect(container.textContent).not.toContain('Auto-saved')
+
+    // Switch to a compiler language — the same toolbar still carries Run/Reset.
+    const langBtn = getByRole('button', { name: /Language: /i })
+    fireEvent.click(langBtn)
+    fireEvent.click(getByRole('menuitem', { name: 'Python' }))
+    expect(getAllByRole('button', { name: /Run/i }).length).toBeGreaterThan(0)
+    expect(getAllByRole('button', { name: 'Reset' }).length).toBeGreaterThan(0)
+  })
 })
