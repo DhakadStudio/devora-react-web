@@ -3,7 +3,10 @@ import { Link } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { CodeBlock } from '../components/JourneyChecklist'
 import { ThemeToggle } from '../components/ThemeToggle'
-import { listPaths, listCourses, listModules, listLessons, type PathSummary } from '../engines/curriculum'
+import {
+  listPathsTree,
+  type PathSummary
+} from '../engines/curriculum'
 import { runCode } from '../engines/execution'
 import { Button } from '../components/Button'
 
@@ -30,17 +33,17 @@ export function Landing() {
       /* storage unavailable — they'll see the landing page again; harmless */
     }
     let cancelled = false
-    listPaths().then(async (paths) => {
+    listPathsTree().then(async (tree) => {
       const cards: { path: PathSummary; lessonTitles: string[] }[] = []
-      for (const p of paths.slice(0, 2)) {
-        const courses = await listCourses(p.id)
-        const course = courses[0]
+      for (const path of tree.slice(0, 2)) {
+        const course = path.courses[0]
         if (!course) continue
-        const modules = await listModules(course.id)
-        const moduleRow = modules[0]
-        if (!moduleRow) continue
-        const lessons = await listLessons(moduleRow.id)
-        cards.push({ path: p, lessonTitles: lessons.slice(0, 3).map((l) => l.title) })
+        const module = course.modules[0]
+        if (!module) continue
+        const lessonTitles = module.lessons
+          .slice(0, 3)
+          .map((lesson) => lesson.title)
+        cards.push({ path, lessonTitles })
       }
       if (!cancelled) setDemoPaths(cards)
     })

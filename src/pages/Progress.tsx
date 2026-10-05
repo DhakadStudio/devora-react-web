@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
-import { listPaths, listCourses, listModules, listLessons, type PathSummary } from '../engines/curriculum'
+import {
+  listPathsTree,
+  type PathSummary
+} from '../engines/curriculum'
 import { useProgress, moduleState, pathCompletion, firstUnfinishedLesson, type ModuleState } from '../engines/progress'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
@@ -21,22 +24,25 @@ interface PathProgressData {
   lessonTitles: Record<string, string>
 }
 
-/** Paths → courses → modules → lessons, composed into per-module lesson lists
- *  and flat lookups — everything the chips and bars need, fetched once. */
+/** One DB request: the whole curriculum tree, composed into progress data. */
 async function loadProgressData(): Promise<PathProgressData[]> {
-  const paths = await listPaths()
+  const tree = await listPathsTree() // SINGLE REQUEST
   const result: PathProgressData[] = []
-  for (const path of paths) {
-    const courses = await listCourses(path.id)
+  
+  for (const path of tree) {
     const modules: ModuleChip[] = []
     const allLessonIds: string[] = []
     const lessonTitles: Record<string, string> = {}
-    for (const course of courses) {
-      const mods = await listModules(course.id)
-      for (const mod of mods) {
-        const lessons = await listLessons(mod.id)
-        modules.push({ id: mod.id, title: mod.title, lessonIds: lessons.map((l) => l.id) })
-        for (const lesson of lessons) {
+    
+    for (const course of path.courses) {
+      for (const mod of course.modules) {
+        const lessonIds = mod.lessons.map((l) => l.id)
+        modules.push({ 
+          id: mod.id, 
+          title: mod.title, 
+          lessonIds: lessonIds 
+        })
+        for (const lesson of mod.lessons) {
           lessonTitles[lesson.id] = lesson.title
           allLessonIds.push(lesson.id)
         }
@@ -271,8 +277,8 @@ export function Progress() {
                         {(ms === 'completed' || ms === 'passed') && <Icon name="check" size={11} />}
                         {mod.title} · {mp.done}/{mp.total}
                       </Link>
-                    )
-                  })}
+                    )}
+                  )}
                 </div>
               </div>
             )
