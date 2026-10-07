@@ -689,8 +689,9 @@ a.card:hover {
 /* The CodeEditor renders its own .editor-host inside — give it a guaranteed
    visible minimum and let its flex:1 resolve against this flex column. */
 .workbench-editor-host > .editor-host {
-  flex: 1;
-  min-height: 320px;
+  flex: 1 !important;
+  min-height: 320px !important;
+  background: var(--code-bg);
 }
 .workbench-terminal-host {
   flex: 1;
@@ -844,10 +845,11 @@ a.card:hover {
 }
 /* Monaco's height:100% resolves against a DEFINITE parent height only — a
    plain block parent (height auto) collapses the editor to 0px. Same
-   guarantee as the workbench's editor host. */
 .webplay-editor-host > .editor-host {
-  flex: 1;
-  min-height: 320px;
+  flex: 1 !important;
+  min-height: 320px !important;
+  background: var(--code-bg);
+}
 }
 .webplay-preview-host {
   flex: 1;
@@ -997,8 +999,8 @@ a.card:hover {
   padding: 0;
 }
 .window:fullscreen .editor-host {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
   background: var(--code-bg);
 }
 .window:fullscreen .window-bar {
@@ -1024,8 +1026,8 @@ a.card:hover {
   height: 100vh;
 }
 .window:-webkit-full-screen .editor-host {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
 }
 .window-bar {
   display: flex;
@@ -1117,8 +1119,8 @@ a.card:hover {
   color: var(--code-comment);
 }
 .editor-host {
-  flex: 1;
-  min-height: 240px;
+  flex: 1 !important;
+  min-height: 240px !important;
   background: var(--code-bg);
 }
 .output-bar {
@@ -1897,6 +1899,33 @@ textarea.input {
   align-items: center;
   gap: 4px;
   margin-top: var(--sp-2);
+}
+.editor-host {
+  flex: 1 !important;
+  min-height: 240px !important;
+.workbench-editor-host > .editor-host {
+  flex: 1 !important;
+  min-height: 320px !important;
+  background: var(--code-bg);
+}
+  flex: 1;
+  min-height: 320px;
+}
+
+.webplay-editor-host > .editor-host {
+  flex: 1;
+  min-height: 240px;
+}
+
+.window:fullscreen .editor-host {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  background: var(--code-bg);
+}
+
+.window:-webkit-full-screen .editor-host {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
 }
 @media (max-width: 560px) {
   .heat-cell {
