@@ -1,27 +1,40 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { CodeBlock } from '../components/JourneyChecklist'
 import { ThemeToggle } from '../components/ThemeToggle'
-import {
-  listPathsTree,
-  type PathSummary
+import type {
+  PathSummary,
+  CourseSummary,
+  LessonRef
 } from '../engines/curriculum'
 import { runCode } from '../engines/execution'
 import { Button } from '../components/Button'
+import { useContext } from 'react'
+import { CurriculumContext } from '../providers/CurriculumProvider'
 
 const DEMO_CODE = `let greeting = "Hello, Devora"\nconsole.log(greeting)`
 
 export function Landing() {
   const [ran, setRan] = useState(false)
   const [output, setOutput] = useState<string | null>(null)
-  const [demoPaths, setDemoPaths] = useState<{ path: PathSummary; lessonTitles: string[] }[]>([])
+  const { data: treeData, status, error, refetch } = useContext(CurriculumContext)
 
-  async function runDemo() {
-    setRan(true)
-    const r = await runCode({ language: 'javascript', code: DEMO_CODE })
-    setOutput(r.stdout || (r.error ? r.error.message : '—'))
-  }
+  const demoPaths = useMemo(() => {
+    if (!treeData) return []
+    const cards: { path: PathSummary; lessonTitles: string[] }[] = []
+    for (const path of treeData.slice(0, 2)) {
+      const course = path.courses[0]
+      if (!course) continue
+      const module = course.modules[0]
+      if (!module) continue
+      const lessonTitles = module.lessons
+        .slice(0, 3)
+        .map((lesson) => lesson.title)
+      cards.push({ path, lessonTitles })
+    }
+    return cards
+  }, [treeData])
 
   useEffect(() => {
     document.title = 'Devora — the editor is the lesson'
@@ -32,25 +45,13 @@ export function Landing() {
     } catch {
       /* storage unavailable — they'll see the landing page again; harmless */
     }
-    let cancelled = false
-    listPathsTree().then(async (tree) => {
-      const cards: { path: PathSummary; lessonTitles: string[] }[] = []
-      for (const path of tree.slice(0, 2)) {
-        const course = path.courses[0]
-        if (!course) continue
-        const module = course.modules[0]
-        if (!module) continue
-        const lessonTitles = module.lessons
-          .slice(0, 3)
-          .map((lesson) => lesson.title)
-        cards.push({ path, lessonTitles })
-      }
-      if (!cancelled) setDemoPaths(cards)
-    })
-    return () => {
-      cancelled = true
-    }
   }, [])
+
+  async function runDemo() {
+    setRan(true)
+    const r = await runCode({ language: 'javascript', code: DEMO_CODE })
+    setOutput(r.stdout || (r.error ? r.error.message : '—'))
+  }
 
   return (
     <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>

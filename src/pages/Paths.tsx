@@ -1,79 +1,58 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
-import { listPathsTree, type PathSummary } from '../engines/curriculum'
+import { type PathSummary } from '../engines/curriculum'
 import { useProgress, pathCompletion } from '../engines/progress'
 import { Icon } from '../components/Icon'
 import { ProgressBar } from '../components/JourneyChecklist'
 import { getSupabase } from '../lib/supabase'
+import { useContext } from 'react'
+import { CurriculumContext } from '../providers/CurriculumProvider'
 
 interface PathCard {
   path: PathSummary
   lessonIds: string[]
 }
 
-/** Paths with their lesson ids (courses → modules → lessons) so progress can be derived. */
-async function loadPathCards(): Promise<PathCard[]> {
-  const tree = await listPathsTree()
-  const cards: PathCard[] = []
-  for (const path of tree) {
-    const lessonIds: string[] = []
-    for (const course of path.courses) {
-      for (const mod of course.modules) {
-        for (const lesson of mod.lessons) lessonIds.push(lesson.id)
-      }
-    }
-    cards.push({ path, lessonIds })
-  }
-  return cards
-}
-
 export function Paths() {
   const [progress] = useProgress()
-  const [cards, setCards] = useState<PathCard[] | null>(null)
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [attempt, setAttempt] = useState(0)
+  const { data: treeData, status, error, refetch } = useContext(CurriculumContext)
 
-  useEffect(() => {
-    let cancelled = false
-    setStatus('loading')
-    if (!getSupabase()) {
-      setStatus('error')
-      return
-    }
-    loadPathCards()
-      .then((c) => {
-        if (!cancelled) {
-          setCards(c)
-          setStatus('ready')
+  const pathCards = useMemo(() => {
+    if (!treeData) return null
+    const cards: PathCard[] = []
+    for (const path of treeData) {
+      const lessonIds: string[] = []
+      for (const course of path.courses) {
+        for (const mod of course.modules) {
+          for (const lesson of mod.lessons) lessonIds.push(lesson.id)
         }
-      })
-      .catch(() => {
-        if (!cancelled) setStatus('error')
-      })
-    return () => {
-      cancelled = true
+      }
+      cards.push({ path, lessonIds })
     }
-  }, [attempt])
+    return cards
+  }, [treeData])
 
-  const retry = useCallback(() => setAttempt((a) => a + 1), [])
-
-  return (
-    <div className="page">
-      <PageHeader
-        trail={[{ label: 'Paths' }]}
-        title="Learning paths"
-        sub="Completed, current, and upcoming — always visible. Pick one; it walks you from zero to a real project."
-      />
-
-      {status === 'loading' && (
+  if (status === 'loading') {
+    return (
+      <div className="page">
+        <PageHeader
+          trail={[{ label: 'Paths' }]}
+          title="Learning paths"
+          sub="Completed, current, and upcoming — always visible. Pick one; it walks you from zero to a real project."
+        />
         <div className="grid grid-2" aria-busy="true" aria-label="Loading paths">
           <div className="skeleton" style={{ height: 220 }} />
           <div className="skeleton" style={{ height: 220 }} />
         </div>
-      )}
+      </div>
+    )
+  }
 
-      {status === 'error' && (
+  if (status === 'error') {
+    return (
+      <div className="page">
+        <PageHeader trail={[{ label: 'Paths' }]} title="Your progress" />
         <section className="panel panel-pad rise" role="alert">
           <p className="label">something went wrong</p>
           <h2 style={{ fontSize: 'var(--fs-20)', fontWeight: 600, marginTop: 'var(--sp-2)' }}>
@@ -83,24 +62,39 @@ export function Paths() {
             Check your connection and try again.
           </p>
           <div className="row" style={{ marginTop: 'var(--sp-4)' }}>
-            <button className="btn btn-primary" onClick={retry}>
+            <button className="btn btn-primary" onClick={refetch}>
               Try again
               <Icon name="rotate" size={14} />
             </button>
           </div>
         </section>
-      )}
+      </div>
+    )
+  }
 
-      {status === 'ready' && cards && cards.length === 0 && (
+  if (!pathCards || pathCards.length === 0) {
+    return (
+      <div className="page">
+        <PageHeader trail={[{ label: 'Paths' }]} title="Learning paths" />
         <div className="empty">
           <h3>No paths yet</h3>
           <p>Learning paths will appear here as soon as they're published.</p>
         </div>
-      )}
+      </div>
+    )
+  }
 
-      {status === 'ready' && cards && cards.length > 0 && (
+  return (
+    <div className="page">
+      <PageHeader
+        trail={[{ label: 'Paths' }]}
+        title="Learning paths"
+        sub="Completed, current, and upcoming — always visible. Pick one; it walks you from zero to a real project."
+      />
+
+      {status === 'ready' && pathCards && pathCards.length > 0 && (
         <div className="grid grid-2">
-          {cards.map(({ path, lessonIds }) => {
+          {pathCards.map(({ path, lessonIds }) => {
             const c = pathCompletion(lessonIds, progress)
             const started = c.done > 0
             const done = c.done === c.total && c.total > 0

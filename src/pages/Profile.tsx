@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useToast } from '../components/Toast'
 import { useAuth, signOut } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { useProgress } from '../engines/progress'
 import { CHALLENGES } from '../lib/curriculum'
-import { listPathsTree } from '../engines/curriculum'
 import { useSnippets } from '../lib/snippets'
+import { useContext } from 'react'
+import { CurriculumContext } from '../providers/CurriculumProvider'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
 import { Button } from '../components/Button'
@@ -24,25 +25,20 @@ export function Profile() {
   ).length
   const reflections = Object.keys(progress.reflections).length
   const challengesDone = Object.keys(progress.lessons).filter((id) => id.startsWith('ch-')).length
-  const [lessonCount, setLessonCount] = useState<number | null>(null)
+  const { data: treeData, status, error, refetch } = useContext(CurriculumContext)
 
-  useEffect(() => {
-    let cancelled = false
-    listPathsTree().then((tree) => {
-      let count = 0
-      for (const p of tree) {
-        for (const c of p.courses) {
-          for (const m of c.modules) {
-            count += m.lessons.length
-          }
+  const lessonCount = useMemo(() => {
+    if (!treeData) return null;
+    let count = 0;
+    for (const p of treeData) {
+      for (const c of p.courses) {
+        for (const m of c.modules) {
+          count += m.lessons.length;
         }
       }
-      if (!cancelled) setLessonCount(count)
-    })
-    return () => {
-      cancelled = true
     }
-  }, [])
+    return count;
+  }, [treeData])
 
   async function handleSignOut() {
     try {

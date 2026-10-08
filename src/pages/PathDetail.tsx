@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useContext } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   listPathsTree,
   type PathSummary,
   type CourseSummary,
-  type LessonRef
+  type LessonRef,
+  type PathTree
 } from '../engines/curriculum'
 import { getProjectForModule } from '../engines/project'
 import { useProgress, moduleState, pathCompletion, firstUnfinishedLesson } from '../engines/progress'
@@ -12,6 +13,7 @@ import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
 import { JourneyNode, ProgressBar } from '../components/JourneyChecklist'
 import { getSupabase } from '../lib/supabase'
+import { CurriculumContext } from '../providers/CurriculumProvider'
 
 interface ModuleDetail {
   id: string
@@ -29,9 +31,7 @@ interface PathDetailData {
   lessonTitles: Record<string, string>
 }
 
-/** One DB request (the curriculum tree) + parallel project lookups per module. */
-async function loadPathDetail(pathId: string): Promise<PathDetailData | null> {
-  const tree = await listPathsTree()
+async function loadPathDetailFromTree(tree: PathTree[], pathId: string): Promise<PathDetailData | null> {
   const path = tree.find((p) => p.id === pathId)
   if (!path) return null
   const courses = path.courses.map((c) => ({ id: c.id, title: c.title, summary: c.summary, position: c.position }))
@@ -48,7 +48,7 @@ async function loadPathDetail(pathId: string): Promise<PathDetailData | null> {
       title: mod.title,
       lessons: mod.lessons.map((l) => ({ id: l.id, title: l.title, position: l.position })),
       project: project ? { id: project.id, title: project.title } : null
-    }))
+    }));
     for (const detail of details) {
       for (const lesson of detail.lessons) {
         moduleByLesson[lesson.id] = detail.id
@@ -64,41 +64,40 @@ async function loadPathDetail(pathId: string): Promise<PathDetailData | null> {
 export function PathDetail() {
   const { pathId } = useParams()
   const [progress] = useProgress()
-  const [data, setData] = useState<PathDetailData | null>(null)
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [attempt, setAttempt] = useState(0)
+  const { data: treeData, status, error, refetch } = useContext(CurriculumContext)
   const [openModule, setOpenModule] = useState<string | null>(null)
+  const [pathDetailData, setPathDetailData] = useState<PathDetailData | null>(null)
+  const [pathDetailError, setPathDetailError] = useState<Error | null>(null)
 
   useEffect(() => {
-    let cancelled = false
-    setStatus('loading')
-    setOpenModule(null)
-    if (!getSupabase()) {
-      setStatus('error')
+    if (!treeData || !pathId) {
+      setPathDetailData(null)
+      setPathDetailError(null)
       return
     }
-    if (!pathId) {
-      setStatus('ready')
-      return
-    }
-    loadPathDetail(pathId)
-      .then((d) => {
-        if (!cancelled) {
-          setData(d)
-          setStatus('ready')
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setStatus('error')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [pathId, attempt])
 
-  const retry = useCallback(() => setAttempt((a) => a + 1), [])
+    setPathDetailError(null)
+    loadPathDetailFromTree(treeData, pathId)
+      .then(data => {
+        setPathDetailData(data)
+      })
+      .catch(err => {
+        console.error(err)
+        setPathDetailError(err)
+      })
+  }, [treeData, pathId])
 
-  if (status === 'loading') {
+  // Determine if we are loading
+  const isLoading =
+    status === 'loading' ||
+    (status === 'ready' && pathDetailData === null && pathDetailError === null)
+
+  // Determine if we have an error
+  const hasError =
+    status === 'error' ||
+    (status === 'ready' && pathDetailError !== null)
+
+  if (isLoading) {
     return (
       <div className="page" aria-busy="true" aria-label="Loading path">
         <div className="skeleton" style={{ height: 16, width: 200, marginBottom: 'var(--sp-4)' }} />
@@ -111,7 +110,7 @@ export function PathDetail() {
     )
   }
 
-  if (status === 'error') {
+  if (hasError) {
     return (
       <div className="page">
         <section className="panel panel-pad rise" role="alert">
@@ -119,11 +118,11 @@ export function PathDetail() {
           <h2 style={{ fontSize: 'var(--fs-20)', fontWeight: 600, marginTop: 'var(--sp-2)' }}>
             We couldn't load this path
           </h2>
-          <p className="muted fs-14" style={{ marginTop: 'var(--sp-2)' }}>
+          <p className="muted fs-14"style={{ marginTop: 'var(--sp-2)' }}>
             Check your connection and try again.
           </p>
           <div className="row" style={{ marginTop: 'var(--sp-4)' }}>
-            <button className="btn btn-primary" onClick={retry}>
+            <button className="btn btn-primary" onClick={refetch}>
               Try again
               <Icon name="rotate" size={14} />
             </button>
@@ -136,7 +135,7 @@ export function PathDetail() {
     )
   }
 
-  if (!data) {
+  if (!pathDetailData) {
     return (
       <div className="page">
         <div className="empty">
@@ -150,11 +149,11 @@ export function PathDetail() {
     )
   }
 
-  const path = data.path
-  const c = pathCompletion(data.allLessonIds, progress)
-  const nextId = firstUnfinishedLesson(data.allLessonIds, progress)
-  const nextTitle = nextId ? data.lessonTitles[nextId] : undefined
-  const nextModuleId = nextId ? data.moduleByLesson[nextId] : undefined
+  const path = pathDetailData.path
+  const c = pathCompletion(pathDetailData.allLessonIds, progress)
+  const nextId = firstUnfinishedLesson(pathDetailData.allLessonIds, progress)
+  const nextTitle = nextId ? pathDetailData.lessonTitles[nextId] : undefined
+  const nextModuleId = nextId ? pathDetailData.moduleByLesson[nextId] : undefined
   // the module holding the learner's current (first unfinished) lesson opens by default
   const effectiveOpen = openModule ?? nextModuleId ?? null
 
@@ -174,8 +173,8 @@ export function PathDetail() {
             <p className="label">journey checklist</p>
             <span className="badge">{path.hours}h estimated</span>
           </div>
-          {data.courses.map((course) => {
-            const mods = data.modulesByCourse[course.id] ?? []
+          {pathDetailData.courses.map((course) => {
+            const mods = pathDetailData.modulesByCourse[course.id] ?? []
             return (
               <div key={course.id} style={{ marginBottom: 'var(--sp-5)' }}>
                 <p className="label" style={{ marginBottom: 'var(--sp-3)', color: 'var(--muted)' }}>
@@ -233,8 +232,8 @@ export function PathDetail() {
                           )}
                         </div>
                       </li>
-                    )
-                  })}
+                    )}
+                  )}
                 </ol>
               </div>
             )

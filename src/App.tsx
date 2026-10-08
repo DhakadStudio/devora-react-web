@@ -9,6 +9,7 @@ import { AuthProvider } from './lib/auth'
 import { ToastProvider, useToast } from './components/Toast'
 import { useEffect, useState } from 'react'
 import { useOnline } from './lib/useOnline'
+import { CurriculumProvider } from './providers/CurriculumProvider'
 
 const NAV_COLLAPSED_KEY = 'devora:nav-collapsed'
 
@@ -121,7 +122,9 @@ export default function App() {
       <AuthProvider>
         <ToastProvider>
           <BrowserRouter>
-            <Shell />
+            <CurriculumProvider>
+              <Shell />
+            </CurriculumProvider>
           </BrowserRouter>
         </ToastProvider>
       </AuthProvider>
