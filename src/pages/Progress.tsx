@@ -6,8 +6,6 @@ import {
 import { useProgress, moduleState, pathCompletion, firstUnfinishedLesson, type ModuleState } from '../engines/progress'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
-import { ProgressBar } from '../components/JourneyChecklist'
-import { ActivityGraph } from '../components/ActivityGraph'
 import { useContext } from 'react'
 import { CurriculumContext } from '../providers/CurriculumProvider'
 
@@ -137,19 +135,19 @@ export function Progress() {
             <div className="panel panel-pad">
               <p className="label">Streak</p>
               <p className="mono" style={{ fontSize: 'var(--fs-28)', fontWeight: 600 }}>
-                {0} {/* This is a placeholder, we will compute the streak below */}
+                {0} {/* TODO: implement streak calculation */}
               </p>
             </div>
             <div className="panel panel-pad">
               <p className="label">Completion rate</p>
               <p className="mono" style={{ fontSize: 'var(--fs-28)', fontWeight: 600 }}>
-                {0}% {/* This is a placeholder, we will compute the completion rate below */}
+                {completionRate}% {/* This is a placeholder, we will compute the completion rate below */}
               </p>
             </div>
             <div className="panel panel-pad">
               <p className="label">Modules completed</p>
               <p className="mono" style={{ fontSize: 'var(--fs-28)', fontWeight: 600 }}>
-                {0} {/* This is a placeholder, we will compute the modules completed below */}
+                {modulesCompletedCount} {/* This is a placeholder, we will compute the modules completed below */}
                 <span className="muted fs-12"> / {totalModulesCount}</span>
               </p>
             </div>
@@ -204,7 +202,7 @@ export function Progress() {
 }
 
 // Helper functions for chip styling and state labels
-const getChipStyle = (ms: ModuleState): React.CSSProperties => {
+const getChipStyle = (ms: ModuleState): CSSProperties => {
   switch (ms) {
     case "not-started":
       return { backgroundColor: "var(--surface)", color: "var(--text)" };
