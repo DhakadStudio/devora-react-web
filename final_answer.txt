@@ -1,0 +1,1 @@
+Curriculum data centralization completed. All pages (Home, Progress, Paths, PathDetail, Landing, Profile) now consume curriculum context via CurriculumProvider, eliminating unnecessary listPathsTree calls during SPA navigation. The implementation preserves existing sessionStorage caching and UI behavior. See CURRICULUM_DATA_CENTRALIZATION_SUMMARY.md for details.

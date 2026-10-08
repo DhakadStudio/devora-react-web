@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import { type PathSummary } from '../engines/curriculum'
 import { useProgress, pathCompletion } from '../engines/progress'
 import { Icon } from '../components/Icon'
 import { ProgressBar } from '../components/JourneyChecklist'
-import { getSupabase } from '../lib/supabase'
 import { useContext } from 'react'
 import { CurriculumContext } from '../providers/CurriculumProvider'
 
@@ -16,7 +15,7 @@ interface PathCard {
 
 export function Paths() {
   const [progress] = useProgress()
-  const { data: treeData, status, error, refetch } = useContext(CurriculumContext)
+  const { data: treeData, status, refetch } = useContext(CurriculumContext)
 
   const pathCards = useMemo(() => {
     if (!treeData) return null

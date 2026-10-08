@@ -1,0 +1,1 @@
+Task completed successfully. All pages now use the centralized curriculum context. No more direct listPathsTree calls in pages. See CURRICULUM_DATA_CENTRALIZATION_SUMMARY.md for details.

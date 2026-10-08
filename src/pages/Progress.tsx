@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useMemo, type CSSProperties } from 'react'
+import { useMemo, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import {
   type PathSummary
@@ -8,7 +8,6 @@ import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
 import { ProgressBar } from '../components/JourneyChecklist'
 import { ActivityGraph } from '../components/ActivityGraph'
-import { getSupabase } from '../lib/supabase'
 import { useContext } from 'react'
 import { CurriculumContext } from '../providers/CurriculumProvider'
 
@@ -27,7 +26,7 @@ interface PathProgressData {
 
 export function Progress() {
   const [progress] = useProgress()
-  const { data: treeData, status, error, refetch } = useContext(CurriculumContext)
+  const { data: treeData, status, refetch } = useContext(CurriculumContext)
 
   const pathProgressData = useMemo(() => {
     if (!treeData) return null
@@ -151,7 +150,7 @@ export function Progress() {
               <p className="label">Modules completed</p>
               <p className="mono" style={{ fontSize: 'var(--fs-28)', fontWeight: 600 }}>
                 {0} {/* This is a placeholder, we will compute the modules completed below */}
-                <span className="muted fs-12"> / {0}</span>
+                <span className="muted fs-12"> / {totalModulesCount}</span>
               </p>
             </div>
           </div>

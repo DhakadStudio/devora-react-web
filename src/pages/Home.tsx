@@ -1,16 +1,13 @@
-import { useCallback, useEffect, useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
 import { CHALLENGES } from '../lib/curriculum'
-import { useProgress, pathCompletion, firstUnfinishedLesson } from '../engines/progress'
-import { ProgressBar } from '../components/JourneyChecklist'
-import { getSupabase } from '../lib/supabase'
+import { useProgress } from '../engines/progress'
 import { useContext } from 'react'
 import { CurriculumContext } from '../providers/CurriculumProvider'
 import {
   type PathSummary,
-  type CourseSummary,
   type LessonRef
 } from '../engines/curriculum'
 
@@ -21,16 +18,9 @@ interface LessonMeta {
   lessonTitle: string
 }
 
-interface CurriculumData {
-  paths: PathSummary[]
-  lessonMeta: Record<string, LessonMeta>
-  lessonsByPath: Record<string, LessonRef[]>
-  allLessonIds: string[]
-}
 
 export function Home() {
-  const [progress] = useProgress()
-  const { data: treeData, status, error, refetch } = useContext(CurriculumContext)
+  const { data: treeData, status, refetch } = useContext(CurriculumContext)
 
   const curriculumData = useMemo(() => {
     if (!treeData) return null

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useToast } from '../components/Toast'
 import { useAuth, signOut } from '../lib/auth'
 import { useTheme } from '../lib/theme'
@@ -25,7 +25,7 @@ export function Profile() {
   ).length
   const reflections = Object.keys(progress.reflections).length
   const challengesDone = Object.keys(progress.lessons).filter((id) => id.startsWith('ch-')).length
-  const { data: treeData, status, error, refetch } = useContext(CurriculumContext)
+  const { data: treeData } = useContext(CurriculumContext)
 
   const lessonCount = useMemo(() => {
     if (!treeData) return null;

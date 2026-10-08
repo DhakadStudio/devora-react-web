@@ -1,0 +1,1 @@
+Curriculum data centralization completed. All pages now consume curriculum context via CurriculumProvider, eliminating unnecessary listPathsTree calls during navigation. See CURRICULUM_DATA_CENTRALIZATION_SUMMARY.md for details.

@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useState, useContext } from 'react'
+import { useEffect, useState, useContext } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  listPathsTree,
   type PathSummary,
   type CourseSummary,
   type LessonRef,
@@ -12,7 +11,6 @@ import { useProgress, moduleState, pathCompletion, firstUnfinishedLesson } from 
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
 import { JourneyNode, ProgressBar } from '../components/JourneyChecklist'
-import { getSupabase } from '../lib/supabase'
 import { CurriculumContext } from '../providers/CurriculumProvider'
 
 interface ModuleDetail {
@@ -64,7 +62,7 @@ async function loadPathDetailFromTree(tree: PathTree[], pathId: string): Promise
 export function PathDetail() {
   const { pathId } = useParams()
   const [progress] = useProgress()
-  const { data: treeData, status, error, refetch } = useContext(CurriculumContext)
+  const { data: treeData, status, refetch } = useContext(CurriculumContext)
   const [openModule, setOpenModule] = useState<string | null>(null)
   const [pathDetailData, setPathDetailData] = useState<PathDetailData | null>(null)
   const [pathDetailError, setPathDetailError] = useState<Error | null>(null)

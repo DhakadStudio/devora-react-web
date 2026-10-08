@@ -5,7 +5,6 @@ import { CodeBlock } from '../components/JourneyChecklist'
 import { ThemeToggle } from '../components/ThemeToggle'
 import type {
   PathSummary,
-  CourseSummary,
   LessonRef
 } from '../engines/curriculum'
 import { runCode } from '../engines/execution'
@@ -18,7 +17,7 @@ const DEMO_CODE = `let greeting = "Hello, Devora"\nconsole.log(greeting)`
 export function Landing() {
   const [ran, setRan] = useState(false)
   const [output, setOutput] = useState<string | null>(null)
-  const { data: treeData, status, error, refetch } = useContext(CurriculumContext)
+  const { data: treeData } = useContext(CurriculumContext)
 
   const demoPaths = useMemo(() => {
     if (!treeData) return []
