@@ -5,7 +5,6 @@ import { CodeBlock } from '../components/JourneyChecklist'
 import { ThemeToggle } from '../components/ThemeToggle'
 import type {
   PathSummary,
-  LessonRef
 } from '../engines/curriculum'
 import { runCode } from '../engines/execution'
 import { Button } from '../components/Button'

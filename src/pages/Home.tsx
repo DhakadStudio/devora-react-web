@@ -3,11 +3,9 @@ import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '../components/Icon'
 import { CHALLENGES } from '../lib/curriculum'
-import { useProgress } from '../engines/progress'
 import { useContext } from 'react'
 import { CurriculumContext } from '../providers/CurriculumProvider'
 import {
-  type PathSummary,
   type LessonRef
 } from '../engines/curriculum'
 
