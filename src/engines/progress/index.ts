@@ -24,13 +24,25 @@ export function useProgress(): [LocalProgressState, ProgressActions] {
   const userRef = useRef(user)
   userRef.current = user
   const pulledRef = useRef<string | null>(null)
+  const pullGen = useRef(0) // generation counter — increments on each user change
 
   useEffect(() => {
-    const u = userRef.current
-    if (!u || pulledRef.current === u.id) return
-    pulledRef.current = u.id
-    pullProgress(u.id).then((remote) => {
-      if (remote) getProgressStore().mergeRemote(remote)
+    const u = userRef.current?.id
+    if (!u) {
+      // User signed out — reset generation so in-flight pulls are ignored
+      pullGen.current = 0
+      pulledRef.current = null
+      return
+    }
+    if (pulledRef.current === u) return // already pulled for this user ID
+    pulledRef.current = u
+    pullGen.current++ // new generation — protects against stale in-flight results
+    const gen = pullGen.current
+    pullProgress(u).then((remote) => {
+      // Only merge if this pull is still the latest generation and remote exists
+      if (pullGen.current === gen && remote !== null) {
+        getProgressStore().mergeRemote(remote)
+      }
     })
   }, [user])
 
