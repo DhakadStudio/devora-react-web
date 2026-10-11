@@ -14,7 +14,7 @@ const CurriculumContext = createContext<CurriculumContextType>({
   status: 'loading',
   error: null,
   refetch: async () => {
-    // No-op
+    // No-op — will be overwritten by CurriculumProvider
   },
 });
 
@@ -33,6 +33,32 @@ export function CurriculumProvider({ children }: CurriculumProviderProps) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<Error | null>(null);
   const fetchPromiseRef = useRef<Promise<PathTree[] | void> | null>(null);
+
+  // Define refetch first (before any useEffect that depends on it)
+  const refetch = useCallback(async () => {
+    // Prevent duplicate requests if a fetch is already in progress
+    if (fetchPromiseRef.current) {
+      return;
+    }
+    setStatus('loading');
+    setError(null);
+    try {
+      const tree = await listPathsTree();
+      // Update sessionStorage cache
+      try {
+        const payload = { savedAt: Date.now(), tree };
+        sessionStorage.setItem('devora-curriculum-cache', JSON.stringify(payload));
+      } catch {
+        // Ignore errors in writing to sessionStorage
+      }
+      setData(tree);
+      setStatus('ready');
+    } catch (err) {
+      setData(null);
+      setStatus('error');
+      setError(err instanceof Error ? err : new Error('Unknown error'));
+    }
+  }, []);
 
   useEffect(() => {
     // Check if we have a cached version in sessionStorage
@@ -92,26 +118,25 @@ export function CurriculumProvider({ children }: CurriculumProviderProps) {
     });
   }, []); // Empty deps means this runs once on mount
 
-  const refetch = useCallback(async () => {
-    setStatus('loading');
-    setError(null);
+  // When the user comes back online, trigger a curriculum refresh if the
+  // cached data has exceeded the revalidate threshold. This avoids a blank
+  // page for users who briefly lost connectivity.
+  useEffect(() => {
+    const online = navigator.onLine;
+    if (!online) return;
+    // Check cache freshness before refetching
     try {
-      const tree = await listPathsTree();
-      // Update sessionStorage cache
-      try {
-        const payload = { savedAt: Date.now(), tree };
-        sessionStorage.setItem('devora-curriculum-cache', JSON.stringify(payload));
-      } catch {
-        // Ignore errors in writing to sessionStorage
+      const cached = sessionStorage.getItem('devora-curriculum-cache');
+      if (!cached) return;
+      const payload = JSON.parse(cached);
+      const TREE_REVALIDATE_MS = 30 * 1000;
+      if (Date.now() - payload.savedAt > TREE_REVALIDATE_MS) {
+        refetch().catch(() => {/* swallow — user will retry manually */});
       }
-      setData(tree);
-      setStatus('ready');
-    } catch (err) {
-      setData(null);
-      setStatus('error');
-      setError(err instanceof Error ? err : new Error('Unknown error'));
+    } catch {
+      // ignore parse errors
     }
-  }, []);
+  }, [refetch]);
 
   if (status === 'loading' && data === null) {
     return (
